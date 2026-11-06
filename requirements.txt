@@ -1,0 +1,5 @@
+anthropic==2.6.0
+pymysql
+fastapi
+uvicorn[standard]
+sqlglot==30.30.0

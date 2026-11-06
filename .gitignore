@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# access log contains who searched for whom - never commit
+logs/
+# table dumps made by the cleanup script contain real data
+cleanup/backups/
+.env

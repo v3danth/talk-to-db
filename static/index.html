@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIS Lookup</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+/* ---------- tokens ---------- */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f1f3f6; --text: #16191d; --muted: #5d6570; --faint: #8a929c;
+  --border: #e2e5ea; --border-strong: #cfd4db;
+  --accent: #2557d6; --accent-hover: #1d47b3; --accent-soft: #eaf0fd; --on-accent: #ffffff;
+  --ok: #157347; --ok-soft: #e6f4ec; --warn: #9a5b00; --warn-soft: #fff4e0; --danger: #b42318; --danger-soft: #fdecea;
+  --t-student: #0b6e8a; --t-faculty: #6b3fc4; --t-staff: #9a5b00; --t-other: #5d6570;
+  --focus: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  --r1: 4px; --r2: 8px; --r3: 12px;
+  --sh1: 0 1px 2px rgba(16,24,40,.06); --sh2: 0 4px 12px rgba(16,24,40,.08); --sh3: 0 12px 32px rgba(16,24,40,.14);
+  --f12: 12px; --f13: 13px; --f14: 14px; --f16: 16px; --f20: 20px; --f24: 24px;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --row-y: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111317; --surface: #191c21; --surface-2: #22262c; --text: #e8eaed; --muted: #a3abb5; --faint: #7d8590;
+    --border: #2c3138; --border-strong: #3b414a;
+    --accent: #7aa2ff; --accent-hover: #9bb9ff; --accent-soft: #1e2a45; --on-accent: #0b1020;
+    --ok: #5fd39a; --ok-soft: #173326; --warn: #f0b45a; --warn-soft: #3a2a10; --danger: #ff8a80; --danger-soft: #3a1f1d;
+    --t-student: #5cc8e6; --t-faculty: #b99bff; --t-staff: #f0b45a; --t-other: #a3abb5;
+    --sh1: none; --sh2: 0 4px 12px rgba(0,0,0,.4); --sh3: 0 12px 32px rgba(0,0,0,.5); }
+}
+body.compact { --row-y: 5px; }
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-padding-top: 110px; }
+body { margin: 0; background: var(--bg); color: var(--text); font: var(--f14)/1.5 var(--sans); }
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--r1); }
+code, pre, .mono { font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--muted); } .small { font-size: var(--f12); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+kbd { font: 11px var(--mono); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: var(--r1); padding: 0 5px; background: var(--surface); color: var(--muted); }
+
+.btn { display: inline-flex; align-items: center; gap: var(--s2); height: 32px; padding: 0 var(--s3); border-radius: var(--r2); border: 1px solid var(--border-strong);
+  background: var(--surface); cursor: pointer; font-size: var(--f13); white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+.btn.ghost:hover { background: var(--surface-2); color: var(--text); }
+.btn.sm { height: 26px; padding: 0 var(--s2); font-size: var(--f12); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* ---------- header ---------- */
+header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: var(--s4); height: 52px; padding: 0 var(--s5);
+  background: var(--surface); border-bottom: 1px solid var(--border); }
+.brand { font-weight: 600; font-size: var(--f16); white-space: nowrap; }
+.env { display: inline-flex; align-items: center; gap: 6px; font-size: var(--f12); color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.env .lock { color: var(--ok); }
+nav { margin-left: auto; display: flex; gap: 2px; }
+nav button, nav a { border: 0; background: none; color: var(--muted); height: 52px; padding: 0 var(--s3); cursor: pointer; font-size: var(--f14);
+  text-decoration: none; display: inline-flex; align-items: center; border-bottom: 2px solid transparent; border-radius: 0; }
+nav button:hover, nav a:hover { color: var(--text); }
+nav button[aria-current="page"] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+main { max-width: 1240px; margin: 0 auto; padding: var(--s5) var(--s5) 160px; }
+.view { display: none; } .view.active { display: block; }
+
+/* ---------- people: search ---------- */
+.searchbar { position: relative; display: flex; gap: var(--s2); }
+.searchbox { flex: 1; position: relative; }
+.searchbox svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
+.searchbox input { width: 100%; height: 46px; padding: 0 70px 0 42px; font: 15px var(--mono); border: 1px solid var(--border-strong); border-radius: var(--r3);
+  background: var(--surface); outline: none; box-shadow: var(--sh1); }
+.searchbox input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.searchbox .hint { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
+.searchbar .btn { height: 46px; border-radius: var(--r3); }
+.typetabs { display: flex; gap: var(--s1); margin: var(--s3) 0 0; flex-wrap: wrap; }
+.typetabs button { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: var(--f13); color: var(--muted); }
+.typetabs button:hover { color: var(--text); border-color: var(--border-strong); }
+.typetabs button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--surface); font-weight: 600; }
+.pills { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); min-height: 0; }
+.pill { display: inline-flex; align-items: center; gap: 2px; font: var(--f12) var(--mono); background: var(--accent-soft); color: var(--accent); border-radius: var(--r2); padding: 2px 2px 2px 8px; max-width: 100%; }
+.pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill button { border: 0; background: none; color: inherit; cursor: pointer; width: 22px; height: 22px; border-radius: var(--r1); }
+.pill button:hover { background: rgba(37,87,214,.15); }
+.pill.free { background: var(--surface-2); color: var(--text); }
+.filters { margin-top: var(--s3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); padding: var(--s4); box-shadow: var(--sh2);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--s4) var(--s5); }
+.filters h4 { margin: 0 0 var(--s2); font-size: var(--f12); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.filters ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.filters li button { width: 100%; text-align: left; border: 0; background: none; padding: 4px 6px; border-radius: var(--r1); cursor: pointer; display: flex; gap: var(--s2); align-items: baseline; }
+.filters li button:hover { background: var(--surface-2); }
+.filters li code { color: var(--accent); flex: none; }
+.filters li span { color: var(--muted); font-size: var(--f12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filters .foot { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: var(--s3); font-size: var(--f12); color: var(--muted); }
+
+/* ---------- people: results ---------- */
+.toolbar { display: flex; align-items: center; gap: var(--s2); margin: var(--s5) 0 var(--s2); min-height: 32px; flex-wrap: wrap; }
+.toolbar .count { font-weight: 600; }
+.toolbar .spacer { flex: 1; }
+.tablewrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); box-shadow: var(--sh1); overflow: auto; max-height: calc(100vh - 290px); }
+table.people { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--f13); }
+table.people th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); text-align: left; font-size: var(--f12); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); padding: 0; white-space: nowrap; }
+table.people th button { all: unset; display: flex; gap: 4px; align-items: center; padding: 8px 12px; cursor: pointer; width: 100%; box-sizing: border-box; }
+table.people th button:hover { color: var(--text); }
+table.people th button:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+table.people th .arrow { opacity: 0; font-size: 10px; }
+table.people th[aria-sort] .arrow { opacity: 1; color: var(--accent); }
+table.people td { padding: var(--row-y) 12px; border-bottom: 1px solid var(--border); vertical-align: top; max-width: 280px; overflow-wrap: anywhere; }
+table.people tbody tr { cursor: pointer; }
+table.people tbody tr:hover td { background: var(--surface-2); }
+table.people tbody tr:focus-visible { outline: none; box-shadow: none; }
+table.people tbody tr:focus-visible td { background: var(--accent-soft); }
+table.people tbody tr:focus-visible td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+table.people tbody tr:last-child td { border-bottom: 0; }
+td.id { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+td .name { font-weight: 500; }
+.sub { color: var(--muted); font-size: var(--f12); }
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid currentColor; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.student { color: var(--t-student); } .badge.faculty { color: var(--t-faculty); } .badge.staff { color: var(--t-staff); } .badge.other { color: var(--t-other); }
+.status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: var(--f12); }
+.status.ok { color: var(--ok); } .status.other { color: var(--muted); }
+.null { color: var(--faint); }
+
+/* empty / loading / error */
+.emptystate { text-align: center; padding: var(--s7) var(--s4); color: var(--muted); }
+.emptystate h2 { color: var(--text); font-size: var(--f20); margin: 0 0 var(--s2); font-weight: 600; }
+.emptystate p { margin: 0 auto; max-width: 560px; }
+.examples { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: center; margin-top: var(--s4); }
+.examples button { font: var(--f13) var(--mono); border: 1px dashed var(--border-strong); background: var(--surface); padding: 6px 12px; border-radius: var(--r2); cursor: pointer; color: var(--text); }
+.examples button:hover { border-style: solid; border-color: var(--accent); color: var(--accent); }
+.recent { max-width: 720px; margin: var(--s6) auto 0; text-align: left; }
+.recent h3 { font-size: var(--f12); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 var(--s2); display: flex; justify-content: space-between; }
+.recent ul { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); overflow: hidden; }
+.recent li button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: var(--s3); align-items: center; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.recent li:last-child button { border-bottom: 0; }
+.recent li button:hover, .recent li button:focus-visible { background: var(--surface-2); }
+.recent .rid { font: 12.5px var(--mono); color: var(--muted); margin-left: auto; }
+.alert { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s3) var(--s4); border-radius: var(--r2); font-size: var(--f13); border: 1px solid; }
+.alert.danger { color: var(--danger); background: var(--danger-soft); border-color: currentColor; }
+.alert.warn { color: var(--warn); background: var(--warn-soft); border-color: currentColor; }
+.alert b { display: block; }
+.alert .grow { flex: 1; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.skel { height: 14px; border-radius: var(--r1); background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ---------- profile ---------- */
+.crumbs { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3); font-size: var(--f13); }
+.crumbs a { color: var(--accent); text-decoration: none; cursor: pointer; } .crumbs a:hover { text-decoration: underline; }
+.pcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); box-shadow: var(--sh1); padding: var(--s5); display: grid; grid-template-columns: auto 1fr auto; gap: var(--s5); align-items: start; }
+.avatar { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: var(--f20); color: var(--on-accent); background: var(--accent); }
+.avatar.student { background: var(--t-student); } .avatar.faculty { background: var(--t-faculty); } .avatar.staff { background: var(--t-staff); } .avatar.other { background: var(--t-other); }
+.pcard h1 { margin: 0; font-size: var(--f24); line-height: 1.2; font-weight: 600; }
+.pcard .line { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin-top: var(--s2); }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--s3) var(--s5); margin-top: var(--s4); }
+.facts dt { font-size: var(--f12); color: var(--muted); }
+.facts dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+.pactions { display: flex; flex-direction: column; gap: var(--s2); align-items: stretch; }
+.switch { display: flex; align-items: center; gap: var(--s2); font-size: var(--f13); cursor: pointer; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: var(--r2); background: var(--surface); }
+.switch input { accent-color: var(--danger); width: 16px; height: 16px; margin: 0; }
+.subnav { position: sticky; top: 52px; z-index: 10; background: var(--bg); display: flex; gap: var(--s1); overflow-x: auto; padding: var(--s3) 0; margin-top: var(--s2); border-bottom: 1px solid var(--border); scrollbar-width: thin; }
+.subnav a { flex: none; font-size: var(--f13); color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.subnav a:hover { background: var(--surface-2); color: var(--text); }
+.subnav a.on { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); font-weight: 600; }
+.subnav .spacer { flex: 1; }
+.subnav label { flex: none; font-size: var(--f12); color: var(--muted); display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 0 var(--s2); }
+.psec { margin-top: var(--s5); }
+.psec > summary, .psec > .head { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: var(--s2); padding: var(--s1) 0 var(--s2); flex-wrap: wrap; }
+.psec > summary::-webkit-details-marker { display: none; }
+.psec > summary::before { content: "▾"; color: var(--faint); font-size: 11px; width: 12px; }
+.psec:not([open]) > summary::before { content: "▸"; }
+.psec h2 { font-size: var(--f16); margin: 0; font-weight: 600; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); overflow: hidden; }
+.kv > div { padding: var(--s2) var(--s3); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); min-width: 0; margin: 0 -1px -1px 0; }
+.kv dt { font: 11px var(--mono); color: var(--muted); }
+.kv dd { margin: 0; font-size: var(--f13); overflow-wrap: anywhere; }
+.kv .masked dd { font-family: var(--mono); letter-spacing: .05em; }
+.kv .masked dt::after { content: " · masked"; color: var(--warn); }
+.kvempty { font-size: var(--f12); color: var(--muted); margin-top: var(--s2); }
+.tag { font: 600 11px var(--mono); padding: 1px 6px; border-radius: var(--r1); background: var(--surface-2); color: var(--muted); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+
+/* linked data */
+.linkbar { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin-bottom: var(--s3); }
+.linkbar input { height: 32px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--r2); background: var(--surface); width: 260px; max-width: 100%; }
+.progress { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; width: 140px; }
+.progress div { height: 100%; width: 40%; background: var(--accent); animation: indet 1.1s infinite ease-in-out; }
+@keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.modgroup { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); margin-bottom: var(--s2); overflow: hidden; }
+.modgroup > summary { list-style: none; cursor: pointer; padding: 10px var(--s4); display: flex; gap: var(--s2); align-items: baseline; }
+.modgroup > summary::-webkit-details-marker { display: none; }
+.modgroup > summary::before { content: "▸"; color: var(--faint); font-size: 11px; width: 12px; }
+.modgroup[open] > summary::before { content: "▾"; }
+.modgroup > summary b { font-family: var(--mono); font-size: var(--f13); }
+.modgroup > summary .count { margin-left: auto; }
+.modgroup .inner { border-top: 1px solid var(--border); }
+.ltable { border-bottom: 1px solid var(--border); }
+.ltable:last-child { border-bottom: 0; }
+.ltable > summary { list-style: none; cursor: pointer; padding: 8px var(--s4) 8px 36px; display: flex; gap: var(--s2); align-items: center; font-size: var(--f13); flex-wrap: wrap; }
+.ltable > summary::-webkit-details-marker { display: none; }
+.ltable > summary:hover { background: var(--surface-2); }
+.ltable .body { padding: 0 var(--s4) var(--s3) 36px; }
+.ondemand { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
+/* shared result table */
+.result-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: var(--r2); background: var(--surface); }
+table.result { border-collapse: collapse; font-size: 12.5px; width: max-content; min-width: 100%; }
+table.result th, table.result td { padding: 4px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+table.result th { position: sticky; top: 0; background: var(--surface-2); font-weight: 600; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+table.result td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.meta { font-size: var(--f12); color: var(--muted); display: flex; gap: var(--s2); align-items: center; margin-top: var(--s2); flex-wrap: wrap; }
+
+/* toast */
+#toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; background: var(--text); color: var(--surface); padding: 8px 14px; border-radius: var(--r2); font-size: var(--f13); box-shadow: var(--sh3); transition: .2s ease-out; pointer-events: none; z-index: 50; }
+#toast.show { opacity: 1; transform: translateX(-50%); }
+
+/* ---------- ask ---------- */
+.turn { margin-bottom: 28px; max-width: 980px; }
+.q { font-weight: 600; font-size: var(--f16); margin-bottom: 10px; }
+.steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+details.step { border: 1px solid var(--border); border-radius: var(--r2); background: var(--surface); }
+details.step > summary { cursor: pointer; padding: 7px 12px; font-size: var(--f13); color: var(--muted); list-style: none; display: flex; gap: 8px; align-items: center; }
+details.step > summary::-webkit-details-marker { display: none; }
+details.step > summary::before { content: "▸"; font-size: 11px; }
+details.step[open] > summary::before { content: "▾"; }
+details.step .body { padding: 0 12px 12px; }
+.step.err > summary { color: var(--danger); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: 12px var(--mono); background: var(--surface-2); border-radius: var(--r1); padding: 2px 6px; cursor: pointer; border: 0; }
+.chip:hover { color: var(--accent); }
+pre { background: var(--surface-2); padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 6px 0; }
+.thinking { font-size: var(--f13); color: var(--muted); white-space: pre-wrap; }
+.answer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); padding: 4px 18px; }
+.answer:empty { display: none; }
+.answer table { border-collapse: collapse; font-size: var(--f13); } .answer th, .answer td { border: 1px solid var(--border); padding: 4px 8px; }
+.error { color: var(--danger); background: var(--danger-soft); padding: 8px 12px; border-radius: 6px; font-size: var(--f14); }
+.live { font-size: var(--f13); color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.empty { color: var(--muted); padding: 40px 0 10px; max-width: 980px; }
+.empty h2 { color: var(--text); font-size: var(--f20); margin: 0 0 6px; }
+.empty .examples { justify-content: flex-start; }
+.empty .examples button { font-family: var(--sans); text-align: left; }
+form.ask { position: fixed; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, var(--bg) 30%); padding: 24px 16px 18px; }
+form.ask .box { max-width: 980px; margin: 0 auto; display: flex; gap: 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r3); padding: 8px; box-shadow: var(--sh2); }
+form.ask textarea { flex: 1; border: 0; resize: none; background: transparent; padding: 6px 8px; min-height: 24px; max-height: 180px; outline: none; }
+
+/* ---------- schema ---------- */
+.schema { display: grid; grid-template-columns: 300px 1fr; gap: 16px; }
+.schema input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--r2); background: var(--surface); margin-bottom: 10px; }
+.modlist { max-height: calc(100vh - 170px); overflow: auto; border: 1px solid var(--border); border-radius: var(--r3); background: var(--surface); }
+.mod { padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.mod:hover, .mod.sel { background: var(--accent-soft); }
+.mod b { font-family: var(--mono); font-size: var(--f13); } .mod span { display: block; font-size: var(--f12); color: var(--muted); }
+.detail { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); padding: 14px 16px; min-height: 200px; overflow: hidden; }
+.detail h3 { margin: 0 0 6px; font: 600 15px var(--mono); }
+.detail ul { padding-left: 18px; margin: 4px 0; font-size: var(--f13); }
+.detail .cols { columns: 2; font: 12.5px var(--mono); }
+.detail .cols div { break-inside: avoid; padding: 1px 0; } .detail .cols i { color: var(--muted); font-style: normal; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 860px) {
+  header { padding: 0 var(--s4); gap: var(--s2); } .env { display: none; }
+  main { padding: var(--s4) var(--s4) 160px; }
+  .pcard { grid-template-columns: auto 1fr; } .pactions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+  .schema { grid-template-columns: 1fr; } .modlist { max-height: 260px; } .detail .cols { columns: 1; }
+}
+@media (max-width: 640px) {
+  nav { overflow-x: auto; scrollbar-width: none; }
+  nav button, nav a { padding: 0 8px; font-size: var(--f13); white-space: nowrap; flex: none; }
+  .brand { display: none; }
+  .searchbox .hint { display: none; } .searchbox input { padding-right: 12px; }
+  .searchbar .btn .lbl { display: none; }
+  .tablewrap { max-height: none; background: none; border: 0; box-shadow: none; }
+  table.people thead { display: none; }
+  table.people, table.people tbody, table.people tr, table.people td { display: block; width: 100%; max-width: none; }
+  table.people tr { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); margin-bottom: var(--s2); padding: var(--s2) 0; }
+  table.people td { border: 0; padding: 2px var(--s4); display: flex; gap: var(--s3); }
+  table.people td::before { content: attr(data-label); flex: 0 0 96px; color: var(--muted); font-size: var(--f12); }
+  .avatar { width: 48px; height: 48px; font-size: var(--f16); }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">MIS Lookup</span>
+  <span class="env" id="env" title="Every query runs on a SELECT-only MySQL account"><span class="lock">●</span><span id="dbinfo">local</span> · read-only</span>
+  <nav aria-label="Main">
+    <button data-view="people" aria-current="page">People</button>
+    <button data-view="ask">Ask AI</button>
+    <button data-view="map">Schema</button>
+    <a href="/relationships" target="_blank" rel="noopener">Relationships ↗</a>
+  </nav>
+</header>
+
+<main>
+  <!-- ================= PEOPLE ================= -->
+  <section class="view active" id="view-people" aria-label="People">
+    <div id="psearch">
+      <div class="searchbar">
+        <div class="searchbox">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="pq" type="search" placeholder="Name, ID, phone or email  ·  or  name=ravi dept=cse" autocomplete="off" spellcheck="false"
+                 aria-label="Search people" aria-describedby="pq-help" aria-controls="presults">
+          <span class="hint"><kbd>/</kbd></span>
+        </div>
+        <button class="btn" id="filtersbtn" aria-expanded="false" aria-controls="filters" title="All search fields">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4"/></svg><span class="lbl">Fields</span>
+        </button>
+      </div>
+      <span id="pq-help" class="sr">Type field=value pairs, for example name=ravi kumar type=student. Press down arrow to move into the results.</span>
+      <div class="typetabs" role="group" aria-label="Person type" id="typetabs"></div>
+      <div class="filters" id="filters" hidden></div>
+      <div class="pills" id="pills" aria-label="Active filters"></div>
+    </div>
+    <div id="presults" aria-live="polite"></div>
+    <div id="pprofile" hidden></div>
+  </section>
+
+  <!-- ================= ASK ================= -->
+  <section class="view" id="view-ask" aria-label="Ask AI">
+    <div id="thread">
+      <div class="empty" id="empty">
+        <h2>Ask anything about the MIS data</h2>
+        Plain-English questions. Claude finds the tables, writes read-only SQL, runs it, and shows every query and result.
+        <div class="examples">
+          <button>How many students are currently registered in each department this session?</button>
+          <button>Average CGPA by branch for the 2021 B.Tech batch</button>
+          <button>Which hostels have the most students allotted?</button>
+          <button>How many faculty members are there per designation?</button>
+          <button>Monthly count of leave applications in 2025</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SCHEMA ================= -->
+  <section class="view" id="view-map" aria-label="Schema">
+    <div class="schema">
+      <div>
+        <input id="schema-q" type="search" placeholder="Search tables or columns, e.g. hostel room" autocomplete="off" aria-label="Search tables">
+        <div class="modlist" id="modlist"></div>
+      </div>
+      <div class="detail" id="detail"><span class="muted">Pick a module or search, then click a table to see its columns and joins.</span></div>
+    </div>
+  </section>
+</main>
+
+<form class="ask" id="ask" hidden>
+  <div class="box">
+    <textarea id="q" rows="1" placeholder="Ask a question about the data…" aria-label="Question"></textarea>
+    <button type="button" class="btn ghost" id="newchat">New chat</button>
+    <button type="submit" class="btn primary" id="send">Ask</button>
+  </div>
+</form>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const md = s => window.marked ? marked.parse(s) : `<pre>${esc(s)}</pre>`;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("mis." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("mis." + k, JSON.stringify(v)); } catch {} },
+};
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1800); }
+function copy(text, what = "Copied") { navigator.clipboard?.writeText(text).then(() => toast(what), () => toast("Copy failed")); }
+async function getJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+
+/* ---------- navigation ---------- */
+function showView(name) {
+  $$("nav button").forEach(x => { if (x.dataset.view === name) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
+  $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
+  $("#ask").hidden = name !== "ask";
+  if (name === "map" && !$("#modlist").children.length) loadModules();
+  if (name === "ask") $("#q").focus();
+}
+$$("nav button").forEach(b => b.onclick = () => {
+  if (b.dataset.view !== "people" && location.hash) history.replaceState(null, "", location.pathname);
+  showView(b.dataset.view);
+});
+document.addEventListener("keydown", e => {
+  const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if ((e.key === "/" && !typing) || (e.key === "k" && (e.metaKey || e.ctrlKey))) {
+    e.preventDefault(); showView("people"); if (location.hash) location.hash = ""; $("#pq").focus(); $("#pq").select();
+  } else if (e.key === "Escape" && !typing && location.hash.startsWith("#p=")) {
+    location.hash = "";
+  }
+});
+
+/* =================================================================== PEOPLE */
+const TYPES = [["", "All"], ["student", "Students"], ["faculty", "Faculty"], ["staff", "Staff"], ["project", "Project staff"], ["retired", "Retired"], ["daily", "Daily rated"]];
+const STATUS = {A: "Active"};
+const COLS = [
+  {k: "type", label: "Type"}, {k: "id", label: "ID"}, {k: "name", label: "Name"}, {k: "dept", label: "Department"},
+  {k: "prog", label: "Programme / designation"}, {k: "mobile_no", label: "Mobile"}, {k: "email", label: "Email"}, {k: "status", label: "Status"},
+];
+const typeClass = t => t === "Student" ? "student" : t === "Faculty" ? "faculty" : /staff/i.test(t || "") ? "staff" : "other";
+const badge = t => `<span class="badge ${typeClass(t)}">${esc(t || "Unknown")}</span>`;
+const statusHtml = s => STATUS[s] ? `<span class="status ok">✓ ${STATUS[s]}</span>` : `<span class="status other" title="Status code ${esc(s)} - meaning not documented">○ Code ${esc(s || "-")}</span>`;
+const val = v => v === null || v === undefined || v === "" ? '<span class="null">—</span>' : esc(v);
+const prog = p => p.auth_id === "stu" ? [p.course, p.branch].filter(Boolean).join(" · ") : (p.designation || "");
+let pTimer, pReq = 0, linksAbort = null, lastResults = null, sort = {k: null, dir: 1}, fieldIndex = {};
+
+/* --- type tabs, field picker --- */
+$("#typetabs").innerHTML = TYPES.map(([k, l]) => `<button type="button" data-t="${k}" aria-pressed="${k === "" ? "true" : "false"}">${l}</button>`).join("");
+$$("#typetabs button").forEach(b => b.onclick = () => setField("type", b.dataset.t));
+
+getJSON("/api/people/fields").then(groups => {
+  $("#filters").innerHTML = Object.entries(groups).map(([g, fields]) =>
+    `<div><h4>${esc(g)}</h4><ul>${Object.entries(fields).map(([k, h]) => { fieldIndex[k] = h;
+      return `<li><button type="button" data-k="${esc(k)}" title="${esc(h)}"><code>${esc(k)}=</code><span>${esc(h)}</span></button></li>`; }).join("")}</ul></div>`).join("") +
+    `<div class="foot">Combine any fields: <code>type=student dept=cse year=2021 hostel=amber</code>. Values are partial matches unless noted. Text with no field searches name, ID, phone and email.</div>`;
+  $$("#filters li button").forEach(b => b.onclick = () => {
+    const q = $("#pq"); q.value = (q.value.trim() + " " + b.dataset.k + "=").trimStart(); toggleFilters(false); q.focus();
+  });
+}).catch(() => {});
+function toggleFilters(open = $("#filters").hidden) {
+  $("#filters").hidden = !open; $("#filtersbtn").setAttribute("aria-expanded", open);
+}
+$("#filtersbtn").onclick = () => toggleFilters();
+document.addEventListener("click", e => { if (!$("#filters").hidden && !e.target.closest("#filters,#filtersbtn")) toggleFilters(false); });
+
+/* --- query <-> pills --- */
+let parsed = {fields: {}, free: ""};
+function buildQuery(fields, free) {
+  return [free, ...Object.entries(fields).map(([k, v]) => `${k}=${v}`)].filter(Boolean).join(" ");
+}
+function setField(k, v) {
+  const f = {...parsed.fields}; if (v) f[k] = v; else delete f[k];
+  $("#pq").value = buildQuery(f, parsed.free); runSearch();
+}
+function renderPills() {
+  const f = parsed.fields, items = Object.entries(f).filter(([k]) => k !== "type");
+  $("#pills").innerHTML = items.map(([k, v]) => `<span class="pill" title="${esc(fieldIndex[k] || "")}"><span>${esc(k)} = ${esc(v)}</span><button type="button" data-k="${esc(k)}" aria-label="Remove ${esc(k)} filter">✕</button></span>`).join("") +
+    (parsed.free ? `<span class="pill free"><span>“${esc(parsed.free)}” in name / ID / phone / email</span><button type="button" data-free aria-label="Remove text search">✕</button></span>` : "");
+  $$("#pills button").forEach(b => b.onclick = () => {
+    const nf = {...f}; let free = parsed.free;
+    if (b.hasAttribute("data-free")) free = ""; else delete nf[b.dataset.k];
+    $("#pq").value = buildQuery(nf, free); runSearch(); $("#pq").focus();
+  });
+  const t = (f.type || "").toLowerCase().replace(/s$/, "").replace(/^prof$/, "faculty");
+  $$("#typetabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t === t || (!t && !b.dataset.t)));
+}
+
+$("#pq").addEventListener("input", () => { clearTimeout(pTimer); pTimer = setTimeout(runSearch, 250); });
+$("#pq").addEventListener("keydown", e => {
+  if (e.key === "Enter") { clearTimeout(pTimer); runSearch(); }
+  if (e.key === "ArrowDown") { const r = $("#presults tbody tr"); if (r) { e.preventDefault(); r.focus(); } }
+  if (e.key === "Escape") { toggleFilters(false); }
+});
+
+/* --- search + results --- */
+async function runSearch() {
+  const q = $("#pq").value.trim();
+  showResults();
+  if (!q) { parsed = {fields: {}, free: ""}; renderPills(); renderHome(); return; }
+  const my = ++pReq;
+  const slow = setTimeout(() => { if (my === pReq) setToolbar(`<span class="spinner" aria-hidden="true"></span><span class="muted">Searching…</span>`); }, 150);
+  let r;
+  try { r = await getJSON("/api/people/search?q=" + encodeURIComponent(q)); }
+  catch (e) {
+    clearTimeout(slow); if (my !== pReq) return;
+    $("#presults").innerHTML = `<div class="toolbar"></div><div class="alert danger"><div class="grow"><b>Search failed</b>${esc(e.message)}. Check that the server is running, then press Enter to retry.</div></div>`;
+    return;
+  } finally { clearTimeout(slow); }
+  if (my !== pReq) return;
+  parsed = {fields: r.fields, free: r.free}; renderPills();
+  lastResults = r; renderResults();
+}
+function setToolbar(html) {
+  let tb = $("#presults .toolbar");
+  if (!tb) { $("#presults").innerHTML = `<div class="toolbar"></div>`; tb = $("#presults .toolbar"); }
+  tb.innerHTML = html;
+}
+
+function renderResults() {
+  const r = lastResults;
+  if (!r.results.length) {
+    $("#presults").innerHTML = `<div class="emptystate"><h2>No one matches</h2><p>${esc(r.message || "Try fewer fields, a shorter part of the name, or fewer phone digits.")}</p>
+      ${Object.keys(r.fields).length > 1 ? `<p class="small" style="margin-top:8px">Every field must match. Remove a filter above to widen the search.</p>` : ""}</div>`;
+    return;
+  }
+  let rows = r.results.map(p => ({...p, prog: prog(p)}));
+  if (sort.k) rows.sort((a, b) => String(a[sort.k] ?? "").localeCompare(String(b[sort.k] ?? ""), undefined, {numeric: true}) * sort.dir);
+  const compact = document.body.classList.contains("compact");
+  $("#presults").innerHTML = `
+    <div class="toolbar">
+      <span class="count">${r.results.length}${r.more ? "+" : ""} ${r.results.length === 1 ? "person" : "people"}</span><span class="muted small">${r.ms} ms</span>
+      ${r.more ? `<span class="tag warn">first 100 shown · add a field to narrow</span>` : ""}
+      <span class="spacer"></span>
+      <button class="btn sm" id="density" aria-pressed="${compact}" title="Toggle row density">Compact rows</button>
+      <button class="btn sm" id="exportcsv">Export CSV</button>
+    </div>
+    <div class="tablewrap"><table class="people">
+      <thead><tr>${COLS.map(c => `<th scope="col"${sort.k === c.k ? ` aria-sort="${sort.dir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-k="${c.k}">${c.label}<span class="arrow">${sort.k === c.k && sort.dir < 0 ? "▼" : "▲"}</span></button></th>`).join("")}</tr></thead>
+      <tbody>${rows.map(p => `<tr tabindex="0" data-id="${esc(p.id)}" aria-label="${esc(p.name || p.id)}, ${esc(p.type || "")}">
+        <td data-label="Type">${badge(p.type)}</td>
+        <td data-label="ID" class="id">${esc(p.id)}</td>
+        <td data-label="Name"><span class="name">${val(p.name)}</span></td>
+        <td data-label="Department">${val(p.dept)}</td>
+        <td data-label="Programme">${p.auth_id === "stu"
+          ? `${val(p.course)}<div class="sub">${esc([p.branch, p.semester ? "sem " + p.semester : "", p.enrollment_year].filter(Boolean).join(" · "))}</div>`
+          : val(p.designation)}</td>
+        <td data-label="Mobile" class="mono">${val(p.mobile_no)}</td>
+        <td data-label="Email">${val(p.email)}</td>
+        <td data-label="Status">${statusHtml(p.status)}</td></tr>`).join("")}</tbody>
+    </table></div>`;
+  $$("#presults th button").forEach(b => b.onclick = () => { sort = {k: b.dataset.k, dir: sort.k === b.dataset.k ? -sort.dir : 1}; renderResults(); $(`#presults th button[data-k="${b.dataset.k}"]`).focus(); });
+  $("#density").onclick = () => { document.body.classList.toggle("compact"); store.set("compact", document.body.classList.contains("compact")); $("#density").setAttribute("aria-pressed", document.body.classList.contains("compact")); };
+  $("#exportcsv").onclick = () => downloadCSV(["id", "type", "name", "dept", "course", "branch", "semester", "enrollment_year", "designation", "mobile_no", "email", "status"], rows, "people.csv");
+  $$("#presults tbody tr").forEach(tr => {
+    tr.onclick = () => openPerson(tr.dataset.id);
+    tr.onkeydown = e => {
+      if (e.key === "Enter") openPerson(tr.dataset.id);
+      else if (e.key === "ArrowDown") { e.preventDefault(); tr.nextElementSibling?.focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); (tr.previousElementSibling || $("#pq")).focus(); }
+    };
+  });
+}
+
+function renderHome() {
+  const recent = store.get("recent", []);
+  $("#presults").innerHTML = `<div class="emptystate">
+    <h2>Find anyone in MIS</h2>
+    <p>Search students, faculty and staff by any detail, then open a person to see their full record and every table that mentions them.</p>
+    <div class="examples">${["name=ravi kumar", "type=student dept=cse year=2022", "phone=98765", "type=faculty designation=professor", "hostel=amber sem=3", "type=staff joined=2015"]
+      .map(x => `<button type="button">${esc(x)}</button>`).join("")}</div>
+    ${recent.length ? `<div class="recent"><h3><span>Recently viewed</span><button class="btn ghost sm" id="clearrecent">Clear</button></h3><ul>${recent.map(p =>
+      `<li><button type="button" data-id="${esc(p.id)}">${badge(p.type)}<span>${esc(p.name || p.id)}</span><span class="rid">${esc(p.id)}</span></button></li>`).join("")}</ul></div>` : ""}
+    <p class="small" style="margin-top:24px">Press <kbd>/</kbd> to search from anywhere · <kbd>↓</kbd> to move into results · <kbd>Esc</kbd> to leave a profile</p>
+  </div>`;
+  $$("#presults .examples button").forEach(b => b.onclick = () => { $("#pq").value = b.textContent; runSearch(); });
+  $$("#presults .recent li button").forEach(b => b.onclick = () => openPerson(b.dataset.id));
+  $("#clearrecent")?.addEventListener("click", () => { store.set("recent", []); renderHome(); });
+}
+function remember(s) {
+  const list = store.get("recent", []).filter(p => p.id !== s.id);
+  list.unshift({id: s.id, name: s.name, type: s.type});
+  store.set("recent", list.slice(0, 8));
+}
+
+function showResults() {
+  $("#pprofile").hidden = true; $("#psearch").hidden = false; $("#presults").hidden = false;
+  if (linksAbort) linksAbort.abort();
+}
+
+/* --- routing --- */
+window.addEventListener("hashchange", routeHash);
+function routeHash() {
+  const m = location.hash.match(/^#p=(.+)$/);
+  if (m) { showView("people"); loadPerson(decodeURIComponent(m[1])); }
+  else { showResults(); if (!$("#presults").innerHTML) renderHome(); }
+}
+function openPerson(id) { location.hash = "p=" + encodeURIComponent(id); }
+
+/* --- profile --- */
+let modLabels = {};
+let reveal = false;
+async function loadPerson(id) {
+  if (linksAbort) linksAbort.abort();
+  $("#psearch").hidden = true; $("#presults").hidden = true;
+  const el = $("#pprofile"); el.hidden = false; window.scrollTo(0, 0);
+  el.innerHTML = `<div class="crumbs"><a onclick="backToResults()">← People</a></div>
+    <div class="pcard"><div class="avatar other"></div><div style="display:grid;gap:10px"><div class="skel" style="width:40%;height:22px"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:55%"></div></div></div>`;
+  let p;
+  try { p = await getJSON(`/api/people/${encodeURIComponent(id)}?reveal=${reveal}`); }
+  catch (e) { el.innerHTML = `<div class="crumbs"><a onclick="backToResults()">← People</a></div><div class="alert danger"><div class="grow"><b>Couldn't load ${esc(id)}</b>${esc(e.message)}.</div><button class="btn sm" onclick="loadPerson('${esc(id)}')">Retry</button></div>`; return; }
+  if (!p.found) { el.innerHTML = `<div class="crumbs"><a onclick="backToResults()">← People</a></div><div class="emptystate"><h2>No person with ID ${esc(id)}</h2><p>The ID isn't in <code>users</code> or <code>user_details</code>. Check for a typo or search by name.</p></div>`; return; }
+  const s = p.summary; remember(s);
+  const tc = typeClass(s.type);
+  const initials = (s.name || id).split(/\s+/).filter(w => !/\.$|^(mr|mrs|ms|dr|prof|shri|smt)$/i.test(w)).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+  const facts = [
+    ["Department", s.dept],
+    ...(s.auth_id === "stu" ? [["Course", s.course], ["Branch", s.branch], ["Semester", s.semester], ["Enrolled", s.enrollment_year]]
+                            : [["Designation", s.designation], ["Employee type", s.emp_type_name]]),
+    ...(s.hostel?.length ? [["Hostel", s.hostel.map(h => h.hostel_name).join(", ")]] : []),
+  ].filter(([, v]) => v !== null && v !== undefined && v !== "");
+  const showEmpty = store.get("showEmpty", false);
+  el.innerHTML = `
+    <div class="crumbs"><a onclick="backToResults()">← People</a><span class="muted">/</span><span class="mono">${esc(id)}</span></div>
+    <div class="pcard">
+      <div class="avatar ${tc}" aria-hidden="true">${esc(initials || "?")}</div>
+      <div>
+        <h1>${esc(s.name || id)}</h1>
+        <div class="line">${badge(s.type)}${statusHtml(s.status)}<span class="mono muted">${esc(id)}</span></div>
+        <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+      </div>
+      <div class="pactions">
+        <button class="btn" id="copyid">Copy ID</button>
+        <label class="switch" title="Shows Aadhaar, bank, PAN and passport numbers. Every reveal is written to the access log.">
+          <input type="checkbox" id="reveal" ${reveal ? "checked" : ""}> Show masked fields</label>
+      </div>
+    </div>
+    ${reveal ? `<div class="alert warn" style="margin-top:12px"><span aria-hidden="true">⚠</span><div class="grow"><b>Sensitive fields are visible</b>This view was written to the access log with your address. Turn it off when you're done.</div><button class="btn sm" id="hide">Hide again</button></div>` : ""}
+    <nav class="subnav" aria-label="Sections" id="subnav">
+      ${p.sections.map(sec => `<a href="#" data-to="sec-${esc(sec.table)}">${esc(sec.title)}</a>`).join("")}
+      <a href="#" data-to="sec-links">Linked data <span id="linkcount"></span></a>
+      <span class="spacer"></span>
+      <label><input type="checkbox" id="showempty" ${showEmpty ? "checked" : ""}> Show empty fields</label>
+    </nav>
+    <div id="sections">${p.sections.map(sec => section(sec, showEmpty)).join("")}</div>
+    <section class="psec" id="sec-links">
+      <div class="head"><h2>Linked data</h2><span class="sub">every other table that holds this ID</span></div>
+      <div class="linkbar">
+        <input id="linkfilter" type="search" placeholder="Filter by table or module" aria-label="Filter linked tables">
+        <button class="btn sm" id="expandall">Expand all</button><button class="btn sm" id="collapseall">Collapse all</button>
+        <span class="spacer" style="flex:1"></span>
+        <span id="linkstatus" class="small muted" aria-live="polite"></span>
+      </div>
+      <div id="links"></div>
+      <div id="ondemand"></div>
+    </section>`;
+  $("#copyid").onclick = () => copy(id, "ID copied");
+  $("#reveal").onchange = e => { reveal = e.target.checked; loadPerson(id); };
+  $("#hide")?.addEventListener("click", () => { reveal = false; loadPerson(id); });
+  $("#showempty").onchange = e => { store.set("showEmpty", e.target.checked); $("#sections").innerHTML = p.sections.map(sec => section(sec, e.target.checked)).join(""); };
+  $$("#subnav a").forEach(a => a.onclick = e => { e.preventDefault(); document.getElementById(a.dataset.to)?.scrollIntoView({behavior: "smooth"}); });
+  $("#linkfilter").oninput = e => filterLinks(e.target.value.toLowerCase());
+  $("#expandall").onclick = () => $$("#links details").forEach(d => d.open = true);
+  $("#collapseall").onclick = () => $$("#links .modgroup").forEach(d => d.open = false);
+  spy();
+  streamLinks(id);
+}
+function backToResults() { if (lastResults) history.back(); else location.hash = ""; }
+
+function section(sec, showEmpty) {
+  const masked = sec.masked.length ? `<span class="tag warn">${reveal ? "revealed" : "masked"}: ${esc(sec.masked.join(", "))}</span>` : "";
+  let body;
+  if (sec.rows.length === 1) {
+    const r = sec.rows[0];
+    const isEmpty = c => r[c] === null || r[c] === undefined || r[c] === "";
+    const cols = showEmpty ? sec.columns : sec.columns.filter(c => !isEmpty(c));
+    const hidden = sec.columns.length - cols.length;
+    body = `<dl class="kv">${cols.map(c => `<div class="${sec.masked.includes(c) && !reveal ? "masked" : ""}"><dt>${esc(c)}</dt><dd>${val(r[c])}</dd></div>`).join("")}</dl>` +
+      (hidden ? `<div class="kvempty">${hidden} empty field${hidden > 1 ? "s" : ""} hidden</div>` : "");
+  } else {
+    body = resultTable(sec.columns, sec.rows);
+  }
+  return `<details class="psec" open id="sec-${esc(sec.table)}"><summary><h2>${esc(sec.title)}</h2><code class="sub">${esc(sec.table)}</code>${sec.rows.length > 1 ? `<span class="tag">${sec.rows.length} rows</span>` : ""}${masked}</summary>${body}</details>`;
+}
+
+function spy() {
+  const links = $$("#subnav a");
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => { if (en.isIntersecting) links.forEach(a => a.classList.toggle("on", a.dataset.to === en.target.id)); });
+  }, {rootMargin: "-120px 0px -70% 0px"});
+  links.forEach(a => { const t = document.getElementById(a.dataset.to); if (t) io.observe(t); });
+}
+
+/* --- linked data --- */
+const groups = {};
+async function streamLinks(id) {
+  linksAbort = new AbortController();
+  for (const k in groups) delete groups[k];
+  let found = 0, total = 0;
+  const status = html => { const s = $("#linkstatus"); if (s) s.innerHTML = html; };
+  status(`<span style="display:inline-flex;gap:8px;align-items:center"><span class="progress"><div></div></span>Searching…</span>`);
+  try {
+    const res = await fetch(`/api/people/${encodeURIComponent(id)}/links?reveal=${reveal}`, {signal: linksAbort.signal});
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
+    while (true) {
+      const {value, done} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream: true}); let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (!line.startsWith("data: ")) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.type === "plan") { total = ev.auto; status(`<span style="display:inline-flex;gap:8px;align-items:center"><span class="progress"><div></div></span>Searching ${total} tables…</span>`); renderOnDemand(id, ev.on_demand); }
+        else if (ev.type === "link") { found++; addLink(ev); $("#linkcount").textContent = `(${found})`; }
+        else if (ev.type === "done") {
+          status(`✓ Found in <b>${ev.found}</b> of ${ev.searched} tables · ${(ev.ms / 1000).toFixed(1)} s${ev.errors ? ` · <span style="color:var(--danger)">⚠ ${ev.errors} tables failed</span>` : ""}`);
+          if (!ev.found) $("#links").innerHTML = `<div class="emptystate" style="padding:24px"><p>No other table holds this ID.</p></div>`;
+        }
+      }
+    }
+  } catch (e) { if (e.name !== "AbortError") status(`<span style="color:var(--danger)">⚠ Linked-data search failed: ${esc(e.message)}</span>`); }
+}
+
+function addLink(ev) {
+  let g = groups[ev.module];
+  if (!g) {
+    const d = document.createElement("details"); d.className = "modgroup"; d.dataset.module = ev.module;
+    d.innerHTML = `<summary><b>${esc(ev.module)}_</b><span class="sub">${esc(modLabels[ev.module] || "")}</span><span class="tag count"></span></summary><div class="inner"></div>`;
+    const after = [...$("#links").children].find(x => x.dataset.module > ev.module);
+    $("#links").insertBefore(d, after || null);
+    g = groups[ev.module] = {el: d, n: 0};
+  }
+  g.n++; g.el.querySelector(".count").textContent = `${g.n} table${g.n > 1 ? "s" : ""}`;
+  const s = document.createElement("details"); s.className = "ltable"; s.dataset.table = ev.table.toLowerCase();
+  s.innerHTML = `<summary><code>${esc(ev.table)}</code><span class="tag">${ev.rows.length}${ev.more ? "+" : ""} row${ev.rows.length > 1 ? "s" : ""}</span>
+      <span class="sub">matched on ${esc(ev.keys.join(" / "))}</span>${ev.masked.length ? `<span class="tag warn">${reveal ? "revealed" : "masked"}: ${esc(ev.masked.join(", "))}</span>` : ""}</summary>
+    <div class="body">${resultTable(ev.columns, ev.rows)}<div class="meta"><button type="button" class="btn sm">Download CSV</button>${ev.more ? `<span>first 50 rows only</span>` : ""}</div></div>`;
+  s.querySelector(".meta button").onclick = () => downloadCSV(ev.columns, ev.rows, `${ev.table}.csv`);
+  g.el.querySelector(".inner").appendChild(s);
+  const f = $("#linkfilter")?.value.toLowerCase(); if (f) filterLinks(f);
+}
+
+function filterLinks(f) {
+  $$("#links .modgroup").forEach(g => {
+    let any = false;
+    g.querySelectorAll(".ltable").forEach(s => { const hit = !f || s.dataset.table.includes(f) || g.dataset.module.includes(f); s.hidden = !hit; any ||= hit; });
+    g.hidden = !any; if (f && any) g.open = true;
+  });
+}
+
+function renderOnDemand(id, list) {
+  if (!list.length) return;
+  $("#ondemand").innerHTML = `<div class="head" style="margin-top:20px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><h2 style="font-size:14px;margin:0">Large tables, scanned on request</h2>
+      <span class="sub">${list.length} tables are too big to search without an index on the person ID. Each scan can take a few seconds.</span></div>
+    <div class="ondemand" style="margin-top:8px">${list.map(t => `<button type="button" class="btn sm" data-t="${esc(t.table)}"><code>${esc(t.table)}</code><span class="sub">~${t.approx_rows.toLocaleString()}</span></button>`).join("")}</div>`;
+  $$("#ondemand button").forEach(b => b.onclick = async () => {
+    b.disabled = true; b.innerHTML = `<span class="spinner" aria-hidden="true"></span><code>${esc(b.dataset.t)}</code> scanning…`;
+    try {
+      const r = await getJSON(`/api/people/${encodeURIComponent(id)}/scan?table=${encodeURIComponent(b.dataset.t)}&reveal=${reveal}`);
+      if (r.error) b.innerHTML = `⚠ <code>${esc(b.dataset.t)}</code> ${esc(r.error)}`;
+      else if (r.empty) b.innerHTML = `○ <code>${esc(b.dataset.t)}</code> no rows`;
+      else { b.innerHTML = `✓ <code>${esc(b.dataset.t)}</code> ${r.rows.length}${r.more ? "+" : ""} rows, added above`; addLink({type: "link", ...r}); groups[r.module].el.open = true; }
+    } catch (e) { b.disabled = false; b.innerHTML = `⚠ <code>${esc(b.dataset.t)}</code> failed, click to retry`; }
+  });
+}
+
+/* =================================================================== ASK */
+let sessionId = null, busy = false;
+const ta = $("#q");
+ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; });
+ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#ask").requestSubmit(); } });
+$$(".empty .examples button").forEach(b => b.onclick = () => { ta.value = b.textContent; $("#ask").requestSubmit(); });
+$("#newchat").onclick = () => {
+  if (busy) return;
+  if (sessionId) fetch("/api/reset", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({session_id: sessionId})});
+  sessionId = null; $("#thread").innerHTML = ""; ta.focus();
+};
+$("#ask").onsubmit = async e => {
+  e.preventDefault();
+  const question = ta.value.trim();
+  if (!question || busy) return;
+  busy = true; $("#send").disabled = true; ta.value = ""; ta.style.height = "auto";
+  $("#empty")?.remove();
+  const turn = document.createElement("div"); turn.className = "turn";
+  turn.innerHTML = `<div class="q">${esc(question)}</div><div class="steps"></div><div class="answer"></div><div class="live"><span class="spinner"></span><span>Thinking…</span></div>`;
+  $("#thread").appendChild(turn);
+  turn.scrollIntoView({behavior: "smooth", block: "start"});
+  const steps = turn.querySelector(".steps"), answer = turn.querySelector(".answer"), live = turn.querySelector(".live");
+  let text = "", thinkingEl = null;
+  try {
+    const res = await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({session_id: sessionId, question})});
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
+    while (true) {
+      const {value, done} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (!line.startsWith("data: ")) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.type === "session") sessionId = ev.session_id;
+        else if (ev.type === "thinking") {
+          if (!thinkingEl) { thinkingEl = step(steps, "reasoning", "Reasoning", ""); thinkingEl.body.className = "body thinking"; }
+          thinkingEl.body.textContent += ev.text;
+        }
+        else if (ev.type === "text") { text += ev.text; answer.innerHTML = md(text); live.querySelector("span:last-child").textContent = "Writing answer…"; }
+        else if (ev.type === "tool_start") { thinkingEl = null; live.querySelector("span:last-child").textContent = label(ev); }
+        else if (ev.type === "tool_result") renderTool(steps, ev);
+        else if (ev.type === "status") live.querySelector("span:last-child").textContent = "Thinking…";
+        else if (ev.type === "error") { const d = document.createElement("div"); d.className = "error"; d.textContent = ev.text; turn.appendChild(d); }
+      }
+    }
+  } catch (err) {
+    const d = document.createElement("div"); d.className = "error"; d.textContent = "Request failed: " + err.message; turn.appendChild(d);
+  } finally {
+    live.remove(); busy = false; $("#send").disabled = false; ta.focus();
+  }
+};
+function label(ev) {
+  if (ev.name === "search_tables") return `Searching schema for “${ev.input.query}”…`;
+  if (ev.name === "describe_tables") return `Reading ${ev.input.tables.join(", ")}…`;
+  return `Running query: ${ev.input.purpose || ""}…`;
+}
+function step(container, tag, title, html, open = false, err = false) {
+  const d = document.createElement("details"); d.className = "step" + (err ? " err" : ""); d.open = open;
+  d.innerHTML = `<summary><span class="tag">${tag}</span><span>${esc(title)}</span></summary><div class="body">${html}</div>`;
+  container.appendChild(d);
+  return {el: d, body: d.querySelector(".body")};
+}
+function renderTool(steps, ev) {
+  if (ev.kind === "search") step(steps, "search", `“${ev.query}” → ${ev.tables.length} tables`, chips(ev.tables));
+  else if (ev.kind === "describe") step(steps, "schema", ev.tables.join(", "), chips(ev.tables));
+  else if (ev.kind === "sql") {
+    const s = step(steps, "sql", `${ev.purpose || "Query"} · ${ev.row_count}${ev.truncated ? "+" : ""} rows · ${ev.ms} ms`, "", true);
+    s.body.innerHTML = `<pre>${esc(ev.sql)}</pre>` + resultTable(ev.columns, ev.rows) +
+      `<div class="meta"><span>${ev.row_count}${ev.truncated ? "+ (capped)" : ""} rows</span><button type="button" class="btn sm">Copy SQL</button><button type="button" class="btn sm">Download CSV</button></div>`;
+    const [copyBtn, csvBtn] = s.body.querySelectorAll(".meta button");
+    copyBtn.onclick = () => copy(ev.sql, "SQL copied");
+    csvBtn.onclick = () => downloadCSV(ev.columns, ev.rows);
+    steps.querySelectorAll("details.step[open]").forEach(d => { if (d !== s.el) d.open = false; });
+  } else if (ev.kind === "sql_error" || ev.kind === "tool_error") {
+    step(steps, "error", `${ev.purpose || "Query"} failed, retrying`, `<pre>${esc(ev.sql)}</pre><div class="error">${esc(ev.error)}</div>`, false, true);
+  }
+}
+function chips(tables) {
+  return `<div class="chips">${tables.map(t => `<button type="button" class="chip" onclick="openTable('${esc(t)}')">${esc(t)}</button>`).join("")}</div>`;
+}
+
+/* =================================================================== shared */
+function resultTable(cols, rows) {
+  if (!cols.length) return "";
+  if (!rows.length) return `<div class="meta">No rows.</div>`;
+  const isNum = v => typeof v === "number";
+  return `<div class="result-wrap"><table class="result"><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
+    rows.map(r => `<tr>${cols.map(c => `<td class="${isNum(r[c]) ? "num" : ""}" title="${esc(r[c])}">${r[c] === null ? '<span class="null">NULL</span>' : esc(r[c])}</td>`).join("")}</tr>`).join("") +
+    `</tbody></table></div>`;
+}
+function downloadCSV(cols, rows, name = "result.csv") {
+  const q = v => v === null || v === undefined ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const csv = [cols.map(q).join(","), ...rows.map(r => cols.map(c => q(r[c])).join(","))].join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"})); a.download = name; a.click();
+}
+
+/* =================================================================== SCHEMA */
+let modules = {};
+async function loadModules() {
+  const r = await getJSON("/api/schema/modules");
+  modules = r.modules;
+  showModules();
+}
+function showModules() {
+  $("#modlist").innerHTML = Object.entries(modules).filter(([, s]) => s.table_count >= 2).map(([m, s]) =>
+    `<div class="mod" tabindex="0" data-m="${esc(m)}"><b>${esc(m)}_</b> · ${s.table_count}<span>${esc(s.label || s.core_tables.slice(0, 3).join(", "))}</span></div>`).join("");
+  $$("#modlist .mod").forEach(el => el.onclick = el.onkeydown = e => {
+    if (e.type === "keydown" && e.key !== "Enter") return;
+    $$("#modlist .mod").forEach(x => x.classList.toggle("sel", x === el));
+    const s = modules[el.dataset.m];
+    $("#detail").innerHTML = `<h3>${esc(el.dataset.m)}_ module</h3><div class="muted" style="font-size:13px;margin-bottom:8px">${esc(s.label)} · ${s.table_count} tables. Core tables, most connected first:</div>${chips(s.core_tables)}`;
+  });
+}
+let searchTimer;
+$("#schema-q").addEventListener("input", e => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  if (!q) return showModules();
+  searchTimer = setTimeout(async () => {
+    const r = await getJSON("/api/schema/search?q=" + encodeURIComponent(q));
+    $("#modlist").innerHTML = r.matches.map(m => `<div class="mod" tabindex="0" onclick="openTable('${esc(m.table)}')"><b>${esc(m.table)}</b><span>~${m.approx_rows.toLocaleString()} rows${m.backup_like ? " · backup-like" : ""}</span></div>`).join("") || `<div class="mod">No matches</div>`;
+  }, 200);
+});
+async function openTable(name) {
+  showView("map");
+  const r = await getJSON("/api/schema/table/" + encodeURIComponent(name));
+  const t = r.tables[name] || Object.values(r.tables)[0];
+  if (!t) { $("#detail").textContent = "Not found: " + name; return; }
+  $("#detail").innerHTML = `<h3>${esc(name)}</h3>
+    <div class="muted" style="font-size:13px">${t.type} · ~${t.approx_rows.toLocaleString()} rows${t.warning ? " · " + esc(t.warning) : ""}</div>
+    <h4>Columns (${t.columns.length})</h4><div class="cols">${t.columns.map(c => `<div>${c.key === "PRI" ? "🔑 " : ""}${esc(c.name)} <i>${esc(c.type)}</i></div>`).join("")}</div>
+    <h4>Joins</h4>${t.joins.length ? `<ul>${t.joins.map(j => `<li><code>${esc(j)}</code></li>`).join("")}</ul>` : `<div class="muted" style="font-size:13px">None found.</div>`}
+    <h4>Used by code</h4><div style="font-size:13px">${esc(t.used_by_code.join(", ") || "-")}</div>`;
+}
+
+/* =================================================================== boot */
+if (store.get("compact", false)) document.body.classList.add("compact");
+getJSON("/api/schema/modules").then(r => {
+  $("#dbinfo").textContent = `${r.database} · ${r.table_count.toLocaleString()} tables`;
+  modLabels = Object.fromEntries(Object.entries(r.modules).map(([m, s]) => [m, s.label || ""]));
+}).catch(() => {});
+routeHash();
+</script>
+</body>
+</html>
