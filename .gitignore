@@ -7,3 +7,7 @@ logs/
 # table dumps made by the cleanup script contain real data
 cleanup/backups/
 .env
+
+# sign-in accounts (password hashes + session secret)
+users.json
+users.json.tmp

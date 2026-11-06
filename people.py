@@ -20,6 +20,7 @@ AUDIT_LOG = os.path.join(HERE, "logs", "people_access.log")
 LARGE_UNINDEXED_ROWS = 150_000   # above this, an unindexed table is scanned only on demand
 LINK_ROW_LIMIT = 50
 LINK_WORKERS = 12
+LINK_ORDER = {"user_login_attempts": "`time` DESC"}   # log tables: show the newest rows first
 
 # Never shown, not even to admins.
 HIDDEN_COL = re.compile(r"(passw|pwd$|^pwd|hash|otp|token|secret|salt$)", re.I)
@@ -85,22 +86,31 @@ def _clean(v):
     return v
 
 
-def _mask(v):
+def _mask(v, full: bool = False):
     s = "" if v is None else str(v)
     if not s:
         return s
+    if full:   # passwords: reveal nothing, not even the length
+        return "••••••••"
     return "•" * max(len(s) - 4, 2) + s[-4:] if len(s) > 4 else "•" * len(s)
 
 
-def _shape(rows: list[dict], reveal: bool) -> tuple[list[str], list[dict], list[str]]:
+# Columns that would be hidden by HIDDEN_COL but that admins may reveal (masked + audit-logged instead).
+# user_login_attempts.password = the wrong password typed at a failed MIS login, stored in plain text by the PHP app
+# (models/user/users_model.php). Account password hashes (users.password, ci_password) stay hidden.
+REVEALABLE = {("user_login_attempts", "password")}
+
+
+def _shape(rows: list[dict], reveal: bool, table: str = "") -> tuple[list[str], list[dict], list[str]]:
     """Drop hidden columns, mask sensitive ones. Returns (columns, rows, masked_columns)."""
     if not rows:
         return [], [], []
-    cols = [c for c in rows[0] if not HIDDEN_COL.search(c)]
-    masked = [c for c in cols if SENSITIVE_COL.search(c)]
+    revealable = {c for c in rows[0] if (table, c) in REVEALABLE}
+    cols = [c for c in rows[0] if c in revealable or not HIDDEN_COL.search(c)]
+    masked = [c for c in cols if c in revealable or SENSITIVE_COL.search(c)]
     out = []
     for r in rows:
-        out.append({c: (_clean(r[c]) if reveal or c not in masked else _mask(r[c])) for c in cols})
+        out.append({c: (_clean(r[c]) if reveal or c not in masked else _mask(r[c], c in revealable)) for c in cols})
     return cols, out, masked
 
 
@@ -132,7 +142,7 @@ FIELD_ALIASES = {
     "year": "year", "batch": "year", "designation": "designation", "desig": "designation", "dob": "dob",
     "mother": "mother", "guardian": "guardian", "gender": "gender", "sex": "gender", "category": "category",
     "cat": "category", "blood": "blood", "city": "city", "state": "state", "pincode": "pincode", "pin": "pincode",
-    "address": "address", "addr": "address", "hostel": "hostel", "level": "level", "stu_type": "level",
+    "address": "address", "addr": "address", "level": "level", "stu_type": "level",
     "enroll": "enroll", "enrollment": "enroll", "enrollment_no": "enroll", "via": "via", "admitted": "via",
     "religion": "religion", "nationality": "nationality", "birthplace": "birthplace", "pwd": "pwd",
     "joined": "joined", "joining": "joined", "retires": "retires", "retirement": "retires",
@@ -146,7 +156,7 @@ SEARCH_FIELDS_HELP = {
         "name": "any part of the name, e.g. name=ravi kumar",
         "id": "admission no. / employee no. (prefix ok)",
         "type": "student | faculty | staff | project | retired | daily",
-        "status": "account status code (A = active; P, L, R, D, X, I, E)",
+        "status": "A active, P passed out, L left, I not reported, D deactivated, R retired?, X ex-employee?",
         "blocked": "yes | no - login blocked",
     },
     "Contact": {
@@ -166,7 +176,7 @@ SEARCH_FIELDS_HELP = {
         "course": "course name or id", "branch": "branch name or id", "sem": "current semester",
         "year": "enrollment year", "level": "ug | pg | jrf | prep | pd",
         "via": "admitted via: iitjee, gate, cat, isme, direct, partjrf...",
-        "enroll": "enrollment no.", "hostel": "hostel name (any allotment)", "abc": "ABC id",
+        "enroll": "enrollment no.", "abc": "ABC id",
         "aadhaar": "full Aadhaar no. (exact match; redacted in the audit log)",
     },
     "Employee": {
@@ -214,8 +224,6 @@ SIMPLE_FIELDS = {
                 lambda v: _digits(v)),
     "enroll": ("u.id IN (SELECT admn_no FROM stu_details WHERE enrollment_no LIKE %s)", lambda v: v + "%"),
     "level": ("u.id IN (SELECT admn_no FROM stu_details WHERE stu_type = %s)", str.lower),
-    "hostel": ("u.id IN (SELECT admn_no FROM hs_student_allotment_list WHERE hostel_name LIKE %s "
-               "AND (is_deleted IS NULL OR is_deleted = 0))", lambda v: f"%{v}%"),
     "research": ("u.id IN (SELECT emp_no FROM faculty_details WHERE research_interest LIKE %s)", lambda v: f"%{v}%"),
     "blood": ("u.id IN (SELECT admn_no FROM stu_details WHERE REPLACE(blood_group, ' ', '') = %s "
               "UNION SELECT emp_no FROM emp_basic_details WHERE REPLACE(blood_group, ' ', '') = %s)",
@@ -381,7 +389,7 @@ def profile(pid: str, reveal: bool = False) -> dict:
             if table not in TABLES:
                 continue
             rows = db.all(f"SELECT * FROM {_q(table)} WHERE {_q(key)} = %s LIMIT 20", (pid,))
-            cols, rows, masked = _shape(rows, reveal)
+            cols, rows, masked = _shape(rows, reveal, table)
             if rows:
                 sections.append({"title": title, "table": table, "columns": cols, "rows": rows, "masked": masked})
         # Lookups that turn codes into names
@@ -406,12 +414,6 @@ def profile(pid: str, reveal: bool = False) -> dict:
             WHERE ud.id = %s""", (pid,))
         s = {k: _clean(v) for k, v in summary[0].items()} if summary else {"id": pid}
         s["type"] = "Student" if s.get("auth_id") == "stu" else EMP_TYPE_LABEL.get(s.get("emp_type") or "", s.get("auth_id"))
-        hostel = []
-        if "hs_student_allotment_list" in TABLES:
-            hostel = [{k: _clean(v) for k, v in r.items()} for r in db.all(
-                "SELECT hostel_name, status, modify_date FROM hs_student_allotment_list "
-                "WHERE admn_no = %s AND (is_deleted IS NULL OR is_deleted = 0) ORDER BY modify_date DESC LIMIT 5", (pid,))]
-        s["hostel"] = hostel
     finally:
         db.close()
     return {"found": True, "id": pid, "summary": s, "sections": sections}
@@ -436,10 +438,11 @@ def link_plan() -> tuple[list[tuple], list[tuple]]:
 
 def _fetch_link(db: _Conn, table: str, keys: list[str], pid: str, reveal: bool):
     cond = " OR ".join(f"{_q(k)} = %s" for k in keys)
-    rows = db.all(f"SELECT * FROM {_q(table)} WHERE {cond} LIMIT {LINK_ROW_LIMIT + 1}", [pid] * len(keys))
+    order = f" ORDER BY {LINK_ORDER[table]}" if table in LINK_ORDER else ""
+    rows = db.all(f"SELECT * FROM {_q(table)} WHERE {cond}{order} LIMIT {LINK_ROW_LIMIT + 1}", [pid] * len(keys))
     if not rows:
         return None
-    cols, shaped, masked = _shape(rows[:LINK_ROW_LIMIT], reveal)
+    cols, shaped, masked = _shape(rows[:LINK_ROW_LIMIT], reveal, table)
     t = TABLES[table]
     return {"table": table, "module": t["module"], "keys": keys, "columns": cols, "rows": shaped,
             "more": len(rows) > LINK_ROW_LIMIT, "masked": masked, "approx_table_rows": t.get("approx_rows", 0)}
@@ -492,3 +495,86 @@ def scan_one(pid: str, table: str, reveal: bool = False) -> dict:
     finally:
         db.close()
     return res or {"table": table, "module": t["module"], "rows": [], "columns": [], "empty": True}
+
+
+# ---------------------------------------------------------------- status labels + value suggestions
+
+# users.status meanings, from the PHP code (payment_admin views, newadmission_reporting, employee/remove).
+# "sure": False = inferred from who has the code, not stated in code.
+STATUS_LABELS = {
+    "A": {"label": "Active", "sure": True},
+    "P": {"label": "Passed out", "sure": True},
+    "L": {"label": "Left", "sure": True},
+    "I": {"label": "Not yet reported", "sure": True, "note": "admitted, hasn't reported; set to A on reporting"},
+    "D": {"label": "Deactivated", "sure": True, "note": "set when an employee record is removed"},
+    "R": {"label": "Retired", "sure": False, "note": "likely: almost all are employees; not set anywhere in the code"},
+    "X": {"label": "Ex-employee", "sure": False, "note": "likely: mostly project staff; not set anywhere in the code"},
+    "E": {"label": "Code E", "sure": False, "note": "meaning unknown; 6 accounts"},
+}
+
+_STATIC_SUGGEST = {
+    "type": [("student", "Students"), ("faculty", "Faculty"), ("staff", "Non-faculty staff"), ("project", "Project staff"),
+             ("retired", "Retired"), ("daily", "Daily rated")],
+    "status": [(k, v["label"] + ("" if v["sure"] else " (likely)")) for k, v in STATUS_LABELS.items()],
+    "level": [("ug", "Undergraduate"), ("pg", "Postgraduate"), ("jrf", "Research (JRF / PhD)"), ("prep", "Preparatory"), ("pd", "Post-doc")],
+    "gender": [("m", "Male"), ("f", "Female")],
+    "pwd": [("yes", "Physically challenged"), ("no", "Not physically challenged")],
+    "blocked": [("yes", "Login blocked"), ("no", "Not blocked")],
+    "group": [("A", "Group A"), ("B", "Group B"), ("C", "Group C")],
+    "blood": [(b, "") for b in ("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-")],
+    "semester": [(str(i), "") for i in range(1, 11)],
+}
+# field -> SQL returning (value, people) for distinct lookup values. Only code/lookup values, never personal data.
+_SQL_SUGGEST = {
+    "dept": "SELECT d.name, COUNT(ud.id) FROM departments d LEFT JOIN user_details ud ON ud.dept_id = d.id GROUP BY d.id, d.name",
+    "designation": "SELECT des.name, COUNT(e.emp_no) FROM designations des LEFT JOIN emp_basic_details e ON e.designation = des.id GROUP BY des.id, des.name",
+    "course": "SELECT name, NULL FROM cbcs_courses UNION SELECT name, NULL FROM cs_courses",
+    "branch": "SELECT name, NULL FROM cbcs_branches UNION SELECT name, NULL FROM cs_branches",
+    "city": "SELECT city, COUNT(DISTINCT id) FROM user_address WHERE city <> '' GROUP BY city HAVING COUNT(DISTINCT id) >= 5",
+    "category": "SELECT category, COUNT(*) FROM user_details WHERE category <> '' GROUP BY category",
+    "via": "SELECT admn_based_on, COUNT(*) FROM stu_academic WHERE admn_based_on <> '' AND admn_based_on <> '0' GROUP BY admn_based_on",
+    "nature": "SELECT employment_nature, COUNT(*) FROM emp_basic_details WHERE employment_nature <> '' GROUP BY employment_nature",
+    "year": "SELECT enrollment_year, COUNT(*) FROM stu_academic WHERE enrollment_year > 0 GROUP BY enrollment_year ORDER BY enrollment_year DESC",
+    "state": "SELECT state, COUNT(DISTINCT id) FROM user_address WHERE state <> '' GROUP BY state HAVING COUNT(DISTINCT id) >= 5",
+    "religion": "SELECT religion, COUNT(*) FROM user_other_details WHERE religion <> '' GROUP BY religion HAVING COUNT(*) >= 5",
+    "nationality": "SELECT nationality, COUNT(*) FROM user_other_details WHERE nationality <> '' GROUP BY nationality HAVING COUNT(*) >= 3",
+}
+_suggest_cache: dict[str, list] = {}
+_suggest_lock = threading.Lock()
+
+
+def _suggest_values(field: str) -> list[dict]:
+    if field in _STATIC_SUGGEST:
+        return [{"value": v, "hint": h} for v, h in _STATIC_SUGGEST[field]]
+    sql = _SQL_SUGGEST.get(field)
+    if not sql:
+        return []
+    with _suggest_lock:
+        if field not in _suggest_cache:
+            db = _Conn(timeout_ms=10_000)
+            try:
+                rows = db.all(sql)
+            finally:
+                db.close()
+            seen, out = set(), []
+            for r in rows:
+                v, n = list(r.values())
+                v = str(_clean(v) or "").strip()
+                if v and v.lower() not in seen:
+                    seen.add(v.lower())
+                    out.append({"value": v, "count": int(n) if n is not None else None})
+            if field != "year":
+                out.sort(key=lambda x: -(x["count"] or 0))
+            _suggest_cache[field] = out
+        return _suggest_cache[field]
+
+
+def suggest(field: str, prefix: str = "", limit: int = 12) -> dict:
+    field = FIELD_ALIASES.get(field.lower(), field.lower())
+    p = prefix.lower().strip()
+    vals = _suggest_values(field)
+    if p:
+        starts = [v for v in vals if v["value"].lower().startswith(p)]
+        inside = [v for v in vals if p in v["value"].lower() and v not in starts]
+        vals = starts + inside
+    return {"field": field, "values": vals[:limit], "enumerable": field in _STATIC_SUGGEST or field in _SQL_SUGGEST}

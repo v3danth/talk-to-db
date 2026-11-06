@@ -19,3 +19,4 @@ Add a line whenever the agent gets something wrong, e.g. "active students = user
 ## Conventions
 - `session_year` looks like '2024-2025'; `session` is the term (e.g. Monsoon / Winter / Summer). Check the real values with SELECT DISTINCT before filtering.
 - Tables ending in `_log` are audit trails; `_desc` holds line items for a parent table; dated or `_bkp` names are snapshots - don't use them for current answers.
+- users.status: A = active, P = passed out, L = left, I = admitted but not yet reported (set to A on reporting), D = deactivated (employee removed). R (mostly employees) = likely retired, X (mostly project staff) = likely ex-employee; R/X/E are never set in the PHP code, so say "likely" when using them.

@@ -3,7 +3,7 @@
 Three tools for the RPE / DB admin team, all at http://127.0.0.1:8765:
 
 - **People** (no API key needed): search students, faculty and staff with `name=ravi kumar type=student dept=cse`,
-  `phone=98765`, `email=...`, `id=21je`, `designation=professor`, 39 fields in all (address, city, hostel, category,
+  `phone=98765`, `email=...`, `id=21je`, `designation=professor`, 38 fields in all (address, city, state, branch, category,
   blood, level, via, joined, research, ...; click **Fields** in the UI for the full list). Click a person for their full profile and
   everything linked to them across ~690 tables, grouped by module. Large unindexed tables have on-demand Scan buttons.
   Passwords/hashes/OTPs are never shown; Aadhaar/bank/PAN/passport are masked until "Show masked fields" is ticked.
@@ -33,11 +33,35 @@ Settings (DB host, users, model, row caps, timeout) are environment variables - 
 | `catalog.json` | The map the agent uses (tables, columns, joins, modules, code usage). |
 | `SCHEMA_MAP.md` | Human-readable map: modules, hub tables, strongest join paths, declared FKs. |
 | `knowledge.md` | Business rules fed to the agent. Add a line whenever it gets something wrong. |
-| `people.py` | People search, profile, linked-data scan, masking, audit log. |
+| `people.py` | People search, value suggestions, status labels, profile, linked-data scan, masking, audit log. |
+| `auth.py`, `manage_users.py` | Optional sign-in (accounts, sessions, lockout) and the CLI to manage accounts. |
 | `build_relationships_doc.py` | Generates `DB_RELATIONSHIPS.html` + `.md` from the catalog. Re-run after `build_catalog.py`. |
 | `agent.py` | Tools (`search_tables`, `describe_tables`, `run_sql`) and the Claude tool loop. |
-| `app.py`, `static/index.html` | Web server (streams progress) and UI (Ask + Schema map tabs). |
+| `app.py`, `static/index.html`, `static/login.html` | Web server and UI (People, Ask AI, Schema), sign-in page. |
 | `cleanup/` | Scripts to drop unwanted tables (see below). |
+
+## Sign-in
+
+Off by default (the header shows **⚠ No sign-in**, meaning keep it on localhost). Turn it on by adding the first account:
+
+```bash
+.venv/bin/python manage_users.py add asha "Asha Verma"   # prompts for a password (10+ chars)
+.venv/bin/python manage_users.py list
+.venv/bin/python manage_users.py remove asha
+```
+
+Accounts live in `users.json` (git-ignored, mode 600, PBKDF2 hashes). With sign-in on, every page and API call needs a
+session (8 h, HttpOnly cookie), the audit log records `username@ip`, and 5 failed sign-ins from one address lock it out
+for 5 minutes. No restart needed.
+
+## Using People
+
+- Type a field and `=`; suggestions show field names, then real values with counts (departments, branches, categories,
+  cities, states, designations...). `Tab` completes, `↑` `↓` + `Enter` picks.
+- The search lives in the URL (`#q=...`), so Back, reload and shared links restore it.
+- On a profile: `J` / `K` next / previous result, `C` copies the ID, `Esc` back to results. `?` lists all shortcuts.
+- Status codes are labelled: A active, P passed out, L left, I not yet reported, D deactivated; R "retired?" and
+  X "ex-employee?" are inferred (never set in the PHP code).
 
 ## Safety
 

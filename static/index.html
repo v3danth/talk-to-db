@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MIS Lookup</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script>
+// Resolve the theme before first paint so there's no flash.
+(function () {
+  let pref = "system"; try { pref = JSON.parse(localStorage.getItem("mis.theme")) || "system"; } catch {}
+  const sys = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.dataset.theme = pref === "system" ? sys : pref;
+})();
+</script>
 <style>
 /* ---------- tokens ---------- */
 :root {
@@ -22,13 +30,15 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --row-y: 10px;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #111317; --surface: #191c21; --surface-2: #22262c; --text: #e8eaed; --muted: #a3abb5; --faint: #7d8590;
+/* data-theme is always set (light | dark) by the boot script, from the saved choice or the system setting */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111317; --surface: #191c21; --surface-2: #22262c; --text: #e8eaed; --muted: #a3abb5; --faint: #7d8590;
     --border: #2c3138; --border-strong: #3b414a;
     --accent: #7aa2ff; --accent-hover: #9bb9ff; --accent-soft: #1e2a45; --on-accent: #0b1020;
     --ok: #5fd39a; --ok-soft: #173326; --warn: #f0b45a; --warn-soft: #3a2a10; --danger: #ff8a80; --danger-soft: #3a1f1d;
     --t-student: #5cc8e6; --t-faculty: #b99bff; --t-staff: #f0b45a; --t-other: #a3abb5;
-    --sh1: none; --sh2: 0 4px 12px rgba(0,0,0,.4); --sh3: 0 12px 32px rgba(0,0,0,.5); }
+    --sh1: none; --sh2: 0 4px 12px rgba(0,0,0,.4); --sh3: 0 12px 32px rgba(0,0,0,.5);
 }
 body.compact { --row-y: 5px; }
 
@@ -264,9 +274,54 @@ form.ask textarea { flex: 1; border: 0; resize: none; background: transparent; p
 .detail .cols { columns: 2; font: 12.5px var(--mono); }
 .detail .cols div { break-inside: avoid; padding: 1px 0; } .detail .cols i { color: var(--muted); font-style: normal; }
 
+/* ---------- header extras ---------- */
+.hdr-right { display: flex; align-items: center; gap: var(--s1); margin-left: var(--s2); }
+.iconbtn { width: 32px; height: 32px; display: inline-grid; place-items: center; border: 0; background: none; border-radius: var(--r2); cursor: pointer; color: var(--muted); }
+.iconbtn:hover { background: var(--surface-2); color: var(--text); }
+.env.warn { color: var(--warn); border-color: currentColor; background: var(--warn-soft); }
+.env.warn .lock { color: var(--warn); }
+.userchip { display: inline-flex; align-items: center; gap: var(--s2); font-size: var(--f13); padding: 0 var(--s1) 0 var(--s2); }
+.userchip .av { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
+
+/* ---------- autocomplete ---------- */
+.ac { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r3);
+  box-shadow: var(--sh3); padding: var(--s1); max-height: 360px; overflow: auto; }
+.ac .grp { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); padding: 6px 10px 2px; }
+.ac [role="option"] { display: flex; gap: var(--s3); align-items: baseline; padding: 7px 10px; border-radius: var(--r2); cursor: pointer; }
+.ac [role="option"][aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.ac [role="option"] code { color: var(--accent); flex: none; }
+.ac [role="option"] .v { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac [role="option"] .h { color: var(--muted); font-size: var(--f12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac [role="option"] .n { margin-left: auto; color: var(--faint); font-size: var(--f12); font-variant-numeric: tabular-nums; flex: none; }
+.ac .foot { display: flex; gap: var(--s3); padding: 6px 10px 4px; border-top: 1px solid var(--border); margin-top: var(--s1); font-size: 11px; color: var(--faint); }
+
+/* ---------- profile extras ---------- */
+.crumbs .pager { margin-left: auto; display: flex; align-items: center; gap: var(--s2); }
+.crumbs .pager span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.kv > div { position: relative; }
+.copybtn { position: absolute; top: 6px; right: 6px; opacity: 0; border: 1px solid var(--border-strong); background: var(--surface); border-radius: var(--r1); font-size: 11px; padding: 1px 6px; cursor: pointer; color: var(--muted); }
+.kv > div:hover .copybtn, .copybtn:focus-visible { opacity: 1; }
+.copybtn:hover { color: var(--accent); border-color: var(--accent); }
+@media (hover: none) { .copybtn { opacity: 1; } }
+.status[title] { cursor: help; }
+
+/* ---------- dialog ---------- */
+dialog { border: 1px solid var(--border-strong); border-radius: var(--r3); background: var(--surface); color: var(--text); padding: var(--s5); box-shadow: var(--sh3); max-width: 520px; width: calc(100% - 32px); }
+dialog::backdrop { background: rgba(10,12,16,.45); }
+dialog h2 { margin: 0 0 var(--s4); font-size: var(--f16); }
+dialog table { width: 100%; border-collapse: collapse; font-size: var(--f13); }
+dialog td { padding: 6px 0; border-bottom: 1px solid var(--border); }
+dialog td:first-child { width: 130px; }
+dialog .close { position: absolute; top: 12px; right: 12px; }
+
+/* ---------- ask setup state ---------- */
+.setup { max-width: 640px; margin: var(--s6) auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); padding: var(--s5); }
+.setup h2 { margin: 0 0 var(--s2); font-size: var(--f20); }
+.setup ol { padding-left: 20px; } .setup li { margin: var(--s2) 0; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
-  header { padding: 0 var(--s4); gap: var(--s2); } .env { display: none; }
+  header { padding: 0 var(--s4); gap: var(--s2); } #env { display: none; }
   main { padding: var(--s4) var(--s4) 160px; }
   .pcard { grid-template-columns: auto 1fr; } .pactions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
   .schema { grid-template-columns: 1fr; } .modlist { max-height: 260px; } .detail .cols { columns: 1; }
@@ -275,6 +330,9 @@ form.ask textarea { flex: 1; border: 0; resize: none; background: transparent; p
   nav { overflow-x: auto; scrollbar-width: none; }
   nav button, nav a { padding: 0 8px; font-size: var(--f13); white-space: nowrap; flex: none; }
   .brand { display: none; }
+  .userchip .nm { display: none; }
+  .env.warn .lbl, #helpbtn, #density { display: none; }
+  .hdr-right { margin-left: 0; flex: none; }
   .searchbox .hint { display: none; } .searchbox input { padding-right: 12px; }
   .searchbar .btn .lbl { display: none; }
   .tablewrap { max-height: none; background: none; border: 0; box-shadow: none; }
@@ -298,7 +356,29 @@ form.ask textarea { flex: 1; border: 0; resize: none; background: transparent; p
     <button data-view="map">Schema</button>
     <a href="/relationships" target="_blank" rel="noopener">Relationships ↗</a>
   </nav>
+  <div class="hdr-right">
+    <button class="iconbtn" id="themebtn" type="button" aria-label="Theme: system" title="Theme: system (click to change)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
+    </button>
+    <button class="iconbtn" id="helpbtn" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>
+    </button>
+    <span id="account"></span>
+  </div>
 </header>
+<dialog id="shortcuts" aria-labelledby="sc-title">
+  <button class="iconbtn close" type="button" aria-label="Close" onclick="this.closest('dialog').close()">✕</button>
+  <h2 id="sc-title">Keyboard shortcuts</h2>
+  <table>
+    <tr><td><kbd>/</kbd> or <kbd>⌘</kbd><kbd>K</kbd></td><td>Search people from anywhere</td></tr>
+    <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd> / <kbd>Tab</kbd></td><td>Pick a field or value from suggestions</td></tr>
+    <tr><td><kbd>↓</kbd> from search</td><td>Move into the results, then <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> to open</td></tr>
+    <tr><td><kbd>J</kbd> / <kbd>K</kbd></td><td>Next / previous person (on a profile)</td></tr>
+    <tr><td><kbd>C</kbd></td><td>Copy the person's ID (on a profile)</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Close suggestions, or go back to results</td></tr>
+    <tr><td><kbd>?</kbd></td><td>Show this list</td></tr>
+  </table>
+</dialog>
 
 <main>
   <!-- ================= PEOPLE ================= -->
@@ -308,8 +388,9 @@ form.ask textarea { flex: 1; border: 0; resize: none; background: transparent; p
         <div class="searchbox">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
           <input id="pq" type="search" placeholder="Name, ID, phone or email  ·  or  name=ravi dept=cse" autocomplete="off" spellcheck="false"
-                 aria-label="Search people" aria-describedby="pq-help" aria-controls="presults">
+                 role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ac" aria-label="Search people" aria-describedby="pq-help">
           <span class="hint"><kbd>/</kbd></span>
+          <div class="ac" id="ac" role="listbox" aria-label="Suggestions" hidden></div>
         </div>
         <button class="btn" id="filtersbtn" aria-expanded="false" aria-controls="filters" title="All search fields">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4"/></svg><span class="lbl">Fields</span>
@@ -373,8 +454,10 @@ const store = {
 };
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1800); }
 function copy(text, what = "Copied") { navigator.clipboard?.writeText(text).then(() => toast(what), () => toast("Copy failed")); }
+function toLogin() { location.href = "/login?next=" + encodeURIComponent(location.pathname + location.hash); }
 async function getJSON(url) {
   const r = await fetch(url);
+  if (r.status === 401) { toLogin(); throw new Error("Signed out"); }
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.json();
 }
@@ -383,33 +466,47 @@ async function getJSON(url) {
 function showView(name) {
   $$("nav button").forEach(x => { if (x.dataset.view === name) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
   $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
-  $("#ask").hidden = name !== "ask";
+  $("#ask").hidden = name !== "ask" || !aiReady;
   if (name === "map" && !$("#modlist").children.length) loadModules();
   if (name === "ask") $("#q").focus();
 }
 $$("nav button").forEach(b => b.onclick = () => {
-  if (b.dataset.view !== "people" && location.hash) history.replaceState(null, "", location.pathname);
+  const onProfile = $("#view-people").classList.contains("active") && !$("#pprofile").hidden;
+  if (b.dataset.view === "people" && onProfile) { backToResults(); return; }   // clicking the active tab returns to its root
   showView(b.dataset.view);
 });
 document.addEventListener("keydown", e => {
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if ((e.key === "/" && !typing) || (e.key === "k" && (e.metaKey || e.ctrlKey))) {
-    e.preventDefault(); showView("people"); if (location.hash) location.hash = ""; $("#pq").focus(); $("#pq").select();
-  } else if (e.key === "Escape" && !typing && location.hash.startsWith("#p=")) {
-    location.hash = "";
+    e.preventDefault(); showView("people"); if (location.hash.startsWith("#p=")) backToResults(); $("#pq").focus(); $("#pq").select();
+  } else if (e.key === "Escape" && !typing && location.hash.startsWith("#p=") && !$("#shortcuts").open) {
+    backToResults();
+  } else if (e.key === "?" && !typing) {
+    e.preventDefault(); $("#shortcuts").showModal();
+  } else if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && location.hash.startsWith("#p=") && !$("#pprofile").hidden) {
+    const id = decodeURIComponent(location.hash.slice(3)), i = resultOrder.indexOf(id);
+    if (e.key === "j" && i >= 0 && i < resultOrder.length - 1) goPerson(resultOrder[i + 1]);
+    else if (e.key === "k" && i > 0) goPerson(resultOrder[i - 1]);
+    else if (e.key === "c") copy(id, "ID copied");
   }
 });
 
 /* =================================================================== PEOPLE */
 const TYPES = [["", "All"], ["student", "Students"], ["faculty", "Faculty"], ["staff", "Staff"], ["project", "Project staff"], ["retired", "Retired"], ["daily", "Daily rated"]];
-const STATUS = {A: "Active"};
+let STATUS = {A: {label: "Active", sure: true}};   // replaced by /api/status
 const COLS = [
   {k: "type", label: "Type"}, {k: "id", label: "ID"}, {k: "name", label: "Name"}, {k: "dept", label: "Department"},
   {k: "prog", label: "Programme / designation"}, {k: "mobile_no", label: "Mobile"}, {k: "email", label: "Email"}, {k: "status", label: "Status"},
 ];
 const typeClass = t => t === "Student" ? "student" : t === "Faculty" ? "faculty" : /staff/i.test(t || "") ? "staff" : "other";
 const badge = t => `<span class="badge ${typeClass(t)}">${esc(t || "Unknown")}</span>`;
-const statusHtml = s => STATUS[s] ? `<span class="status ok">✓ ${STATUS[s]}</span>` : `<span class="status other" title="Status code ${esc(s)} - meaning not documented">○ Code ${esc(s || "-")}</span>`;
+const statusHtml = s => {
+  const st = STATUS[s];
+  if (!st) return `<span class="status other" title="Status code ${esc(s)}: meaning unknown">○ Code ${esc(s || "-")}</span>`;
+  const tip = `Status code ${s}${st.note ? ": " + st.note : ""}`;
+  if (s === "A") return `<span class="status ok" title="${esc(tip)}">✓ Active</span>`;
+  return `<span class="status other" title="${esc(tip)}">○ ${esc(st.label)}${st.sure ? "" : "?"}</span>`;
+};
 const val = v => v === null || v === undefined || v === "" ? '<span class="null">—</span>' : esc(v);
 const prog = p => p.auth_id === "stu" ? [p.course, p.branch].filter(Boolean).join(" · ") : (p.designation || "");
 let pTimer, pReq = 0, linksAbort = null, lastResults = null, sort = {k: null, dir: 1}, fieldIndex = {};
@@ -422,9 +519,10 @@ getJSON("/api/people/fields").then(groups => {
   $("#filters").innerHTML = Object.entries(groups).map(([g, fields]) =>
     `<div><h4>${esc(g)}</h4><ul>${Object.entries(fields).map(([k, h]) => { fieldIndex[k] = h;
       return `<li><button type="button" data-k="${esc(k)}" title="${esc(h)}"><code>${esc(k)}=</code><span>${esc(h)}</span></button></li>`; }).join("")}</ul></div>`).join("") +
-    `<div class="foot">Combine any fields: <code>type=student dept=cse year=2021 hostel=amber</code>. Values are partial matches unless noted. Text with no field searches name, ID, phone and email.</div>`;
+    `<div class="foot">Combine any fields: <code>type=student branch=cse category=obc city=dhanbad</code>. Values are partial matches unless noted. Text with no field searches name, ID, phone and email.</div>`;
   $$("#filters li button").forEach(b => b.onclick = () => {
-    const q = $("#pq"); q.value = (q.value.trim() + " " + b.dataset.k + "=").trimStart(); toggleFilters(false); q.focus();
+    const q = $("#pq"); q.value = (q.value.trim() + " " + b.dataset.k + "=").trimStart(); toggleFilters(false);
+    q.focus(); q.setSelectionRange(q.value.length, q.value.length); acUpdate();
   });
 }).catch(() => {});
 function toggleFilters(open = $("#filters").hidden) {
@@ -455,18 +553,126 @@ function renderPills() {
   $$("#typetabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t === t || (!t && !b.dataset.t)));
 }
 
-$("#pq").addEventListener("input", () => { clearTimeout(pTimer); pTimer = setTimeout(runSearch, 250); });
-$("#pq").addEventListener("keydown", e => {
-  if (e.key === "Enter") { clearTimeout(pTimer); runSearch(); }
-  if (e.key === "ArrowDown") { const r = $("#presults tbody tr"); if (r) { e.preventDefault(); r.focus(); } }
-  if (e.key === "Escape") { toggleFilters(false); }
+/* --- autocomplete: field names, then values for that field --- */
+const ONE_WORD = new Set("type status id semester sem year dob email phone gender category blood pincode level enroll pwd joined retires group abc aadhaar blocked nature".split(" "));
+const ac = {items: [], sel: -1, req: 0, cache: new Map(), timer: 0};
+function acContexts() {
+  const q = $("#pq"), pos = q.selectionStart ?? q.value.length, before = q.value.slice(0, pos);
+  const out = [];
+  const m = before.match(/(\w+)\s*[=:]\s*([^=:]*)$/);
+  if (m) {
+    const key = m[1].toLowerCase(), v = m[2];
+    if (!(ONE_WORD.has(key) && /\s/.test(v))) out.push({mode: "value", key, prefix: v.trim(), start: pos - v.length, end: pos});
+  }
+  const w = before.match(/(^|\s)([a-z_]+)$/i);
+  if (w) out.push({mode: "field", prefix: w[2].toLowerCase(), start: pos - w[2].length, end: pos});
+  if (!q.value.trim()) out.push({mode: "empty"});
+  return out;
+}
+async function acValues(key, prefix) {
+  const k = key + "\u0000" + prefix.toLowerCase();
+  if (!ac.cache.has(k)) ac.cache.set(k, getJSON(`/api/people/suggest?field=${encodeURIComponent(key)}&prefix=${encodeURIComponent(prefix)}`).catch(() => ({values: []})));
+  return ac.cache.get(k);
+}
+async function acUpdate() {
+  const my = ++ac.req, groups = [];
+  let foot = "<span><kbd>↑</kbd><kbd>↓</kbd> choose</span><span><kbd>Tab</kbd> complete</span><span><kbd>Esc</kbd> close</span>";
+  for (const c of acContexts()) {
+    if (c.mode === "value") {
+      const r = await acValues(c.key, c.prefix);
+      if (my !== ac.req) return;
+      const help = fieldIndex[c.key] || fieldIndex[r.field];
+      if (help) foot = `<span><code>${esc(c.key)}=</code> ${esc(help)}</span>`;
+      const vals = r.values.filter(v => v.value.toLowerCase() !== c.prefix.toLowerCase());
+      if (vals.length) { groups.push({title: `${r.field} values`, items: vals.map(v => ({
+        html: `<span class="v">${esc(v.value)}</span>${v.hint ? `<span class="h">${esc(v.hint)}</span>` : ""}${v.count != null ? `<span class="n">${v.count.toLocaleString()}</span>` : ""}`,
+        apply: () => acReplace(c, v.value + " ", true)}))}); break; }
+    } else if (c.mode === "field") {
+      const keys = Object.keys(fieldIndex).filter(k => k.startsWith(c.prefix) && k !== c.prefix);
+      if (keys.length) groups.push({title: "Fields", items: keys.slice(0, 8).map(k => ({
+        html: `<code>${esc(k)}=</code><span class="h">${esc(fieldIndex[k])}</span>`, apply: () => acReplace(c, k + "=", false)}))});
+      break;
+    } else if (c.mode === "empty") {
+      const recent = store.get("searches", []);
+      if (recent.length) groups.push({title: "Recent searches", items: recent.map(s => ({
+        html: `<span class="v mono">${esc(s)}</span>`, apply: () => { $("#pq").value = s; acClose(); runSearch(); }}))});
+      groups.push({title: "Start with a field", items: ["name", "id", "phone", "type", "dept", "branch", "category", "city", "state"].filter(k => fieldIndex[k]).map(k => ({
+        html: `<code>${esc(k)}=</code><span class="h">${esc(fieldIndex[k])}</span>`, apply: () => { $("#pq").value = k + "="; acUpdate(); }}))});
+    }
+  }
+  if (my !== ac.req) return;
+  acRender(groups, foot);
+}
+const acKey = () => $("#pq").value + "\u0000" + $("#pq").selectionStart;
+function acRender(groups, foot) {
+  ac.items = groups.flatMap(g => g.items); ac.sel = -1; ac.builtFor = acKey();
+  const box = $("#ac");
+  if (!ac.items.length || document.activeElement !== $("#pq")) { acClose(); return; }
+  let i = 0;
+  box.innerHTML = groups.map(g => `<div class="grp" role="presentation">${esc(g.title)}</div>` +
+    g.items.map(it => `<div role="option" id="ac-${i}" data-i="${i++}" aria-selected="false">${it.html}</div>`).join("")).join("") +
+    `<div class="foot" role="presentation">${foot}</div>`;
+  box.querySelectorAll("[role=option]").forEach(o => o.onmousedown = e => { e.preventDefault(); ac.items[+o.dataset.i].apply(); });
+  box.hidden = false; $("#pq").setAttribute("aria-expanded", "true"); $("#pq").removeAttribute("aria-activedescendant");
+}
+function acMove(d) {
+  if (!ac.items.length) return;
+  ac.sel = (ac.sel + d + ac.items.length) % ac.items.length;
+  $$("#ac [role=option]").forEach((o, i) => o.setAttribute("aria-selected", i === ac.sel));
+  const cur = $(`#ac-${ac.sel}`); cur.scrollIntoView({block: "nearest"});
+  $("#pq").setAttribute("aria-activedescendant", cur.id);
+}
+function acClose() { clearTimeout(ac.timer); ac.req++; ac.items = []; ac.sel = -1; $("#ac").hidden = true; $("#pq").setAttribute("aria-expanded", "false"); $("#pq").removeAttribute("aria-activedescendant"); }
+function acReplace(c, text, search) {
+  const q = $("#pq"), v = q.value;
+  q.value = v.slice(0, c.start) + text + v.slice(c.end).replace(/^\S*/, "").trimStart();
+  const caret = c.start + text.length; q.setSelectionRange(caret, caret); q.focus();
+  if (search) { acClose(); clearTimeout(pTimer); runSearch(); } else acUpdate();
+}
+
+$("#pq").addEventListener("input", () => {
+  clearTimeout(pTimer); pTimer = setTimeout(runSearch, 300);
+  clearTimeout(ac.timer); ac.timer = setTimeout(acUpdate, 60);
 });
+$("#pq").addEventListener("focus", () => acUpdate());
+$("#pq").addEventListener("click", () => acUpdate());
+$("#pq").addEventListener("blur", () => setTimeout(acClose, 100));
+$("#pq").addEventListener("keydown", e => {
+  const open = !$("#ac").hidden;
+  const fresh = ac.builtFor === acKey();
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (open && fresh) acMove(1);
+    else if (open) { clearTimeout(ac.timer); acUpdate().then(() => acMove(1)); }   // list lagging behind typing: rebuild first
+    else { const r = $("#presults tbody tr"); if (r) r.focus(); }
+  } else if (e.key === "ArrowUp" && open) { e.preventDefault(); if (fresh) acMove(-1); else { clearTimeout(ac.timer); acUpdate().then(() => acMove(-1)); } }
+  else if (e.key === "Tab" && open && ac.items.length && !e.shiftKey) {
+    e.preventDefault();
+    if (ac.builtFor === acKey()) ac.items[Math.max(ac.sel, 0)].apply();
+    else { clearTimeout(ac.timer); acUpdate().then(() => ac.items.length && ac.items[0].apply()); }  // typed faster than the list updated
+  }
+  else if (e.key === "Enter") {
+    e.preventDefault();
+    if (open && ac.sel >= 0 && ac.builtFor === acKey()) { ac.items[ac.sel].apply(); return; }
+    acClose(); clearTimeout(pTimer); runSearch(); rememberSearch();
+  } else if (e.key === "Escape") {
+    e.preventDefault();   // stop the browser clearing a search box on Esc (it would wipe the query)
+    if (open) { e.stopPropagation(); acClose(); } else toggleFilters(false);
+  }
+});
+function rememberSearch(q = $("#pq").value.trim()) {
+  if (!q || q.endsWith("=")) return;
+  store.set("searches", [q, ...store.get("searches", []).filter(s => s !== q)].slice(0, 5));
+}
 
 /* --- search + results --- */
 async function runSearch() {
   const q = $("#pq").value.trim();
   showResults();
-  if (!q) { parsed = {fields: {}, free: ""}; renderPills(); renderHome(); return; }
+  // Keep the search in the URL (replace, not push, so typing doesn't flood history): reload, back and shared links restore it.
+  const want = q ? "#q=" + encodeURIComponent(q) : "";
+  if (location.hash !== want) history.replaceState(null, "", location.pathname + want);
+  if (!q) { parsed = {fields: {}, free: ""}; lastResults = null; renderPills(); renderHome(); return; }
   const my = ++pReq;
   const slow = setTimeout(() => { if (my === pReq) setToolbar(`<span class="spinner" aria-hidden="true"></span><span class="muted">Searching…</span>`); }, 150);
   let r;
@@ -495,6 +701,7 @@ function renderResults() {
   }
   let rows = r.results.map(p => ({...p, prog: prog(p)}));
   if (sort.k) rows.sort((a, b) => String(a[sort.k] ?? "").localeCompare(String(b[sort.k] ?? ""), undefined, {numeric: true}) * sort.dir);
+  resultOrder = rows.map(p => String(p.id));
   const compact = document.body.classList.contains("compact");
   $("#presults").innerHTML = `
     <div class="toolbar">
@@ -536,7 +743,7 @@ function renderHome() {
   $("#presults").innerHTML = `<div class="emptystate">
     <h2>Find anyone in MIS</h2>
     <p>Search students, faculty and staff by any detail, then open a person to see their full record and every table that mentions them.</p>
-    <div class="examples">${["name=ravi kumar", "type=student dept=cse year=2022", "phone=98765", "type=faculty designation=professor", "hostel=amber sem=3", "type=staff joined=2015"]
+    <div class="examples">${["name=ravi kumar", "type=student dept=cse year=2022", "phone=98765", "type=faculty designation=professor", "type=student state=bihar category=obc", "branch=mining city=dhanbad", "type=staff joined=2015"]
       .map(x => `<button type="button">${esc(x)}</button>`).join("")}</div>
     ${recent.length ? `<div class="recent"><h3><span>Recently viewed</span><button class="btn ghost sm" id="clearrecent">Clear</button></h3><ul>${recent.map(p =>
       `<li><button type="button" data-id="${esc(p.id)}">${badge(p.type)}<span>${esc(p.name || p.id)}</span><span class="rid">${esc(p.id)}</span></button></li>`).join("")}</ul></div>` : ""}
@@ -560,16 +767,24 @@ function showResults() {
 /* --- routing --- */
 window.addEventListener("hashchange", routeHash);
 function routeHash() {
-  const m = location.hash.match(/^#p=(.+)$/);
-  if (m) { showView("people"); loadPerson(decodeURIComponent(m[1])); }
-  else { showResults(); if (!$("#presults").innerHTML) renderHome(); }
+  const m = location.hash.match(/^#p=(.+)$/), qm = location.hash.match(/^#q=(.*)$/);
+  if (m) { showView("people"); loadPerson(decodeURIComponent(m[1])); return; }
+  showResults();
+  if (qm) {
+    const q = decodeURIComponent(qm[1]);
+    if ($("#pq").value.trim() !== q || !lastResults) { $("#pq").value = q; runSearch(); }
+  } else if (!$("#presults").innerHTML || lastResults) { $("#pq").value = ""; lastResults = null; parsed = {fields: {}, free: ""}; renderPills(); renderHome(); }
 }
-function openPerson(id) { location.hash = "p=" + encodeURIComponent(id); }
+function openPerson(id) { rememberSearch(); location.hash = "p=" + encodeURIComponent(id); }
+// Prev / next keep one history entry for the profile, so Back still returns to the results.
+function goPerson(id) { history.replaceState(null, "", "#p=" + encodeURIComponent(id)); loadPerson(id); }
+let resultOrder = [];
 
 /* --- profile --- */
 let modLabels = {};
 let reveal = false;
 async function loadPerson(id) {
+  clearTimeout(pTimer); acClose();   // a pending debounced search must not replace the profile
   if (linksAbort) linksAbort.abort();
   $("#psearch").hidden = true; $("#presults").hidden = true;
   const el = $("#pprofile"); el.hidden = false; window.scrollTo(0, 0);
@@ -586,11 +801,14 @@ async function loadPerson(id) {
     ["Department", s.dept],
     ...(s.auth_id === "stu" ? [["Course", s.course], ["Branch", s.branch], ["Semester", s.semester], ["Enrolled", s.enrollment_year]]
                             : [["Designation", s.designation], ["Employee type", s.emp_type_name]]),
-    ...(s.hostel?.length ? [["Hostel", s.hostel.map(h => h.hostel_name).join(", ")]] : []),
   ].filter(([, v]) => v !== null && v !== undefined && v !== "");
   const showEmpty = store.get("showEmpty", false);
+  const pos = lastResults ? resultOrder.indexOf(String(id)) : -1;
   el.innerHTML = `
-    <div class="crumbs"><a onclick="backToResults()">← People</a><span class="muted">/</span><span class="mono">${esc(id)}</span></div>
+    <div class="crumbs"><a onclick="backToResults()" href="javascript:void 0">← ${lastResults ? "Results" : "People"}</a><span class="muted">/</span><span class="mono">${esc(id)}</span>
+      ${pos >= 0 ? `<span class="pager"><button class="btn sm" id="prevp" ${pos === 0 ? "disabled" : ""} title="Previous person (K)">‹ Prev</button>
+        <span>${pos + 1} of ${resultOrder.length}</span>
+        <button class="btn sm" id="nextp" ${pos === resultOrder.length - 1 ? "disabled" : ""} title="Next person (J)">Next ›</button></span>` : ""}</div>
     <div class="pcard">
       <div class="avatar ${tc}" aria-hidden="true">${esc(initials || "?")}</div>
       <div>
@@ -600,7 +818,7 @@ async function loadPerson(id) {
       </div>
       <div class="pactions">
         <button class="btn" id="copyid">Copy ID</button>
-        <label class="switch" title="Shows Aadhaar, bank, PAN and passport numbers. Every reveal is written to the access log.">
+        <label class="switch" title="Shows Aadhaar, bank, PAN and passport numbers, and wrong passwords typed at failed MIS logins. Every reveal is written to the access log.">
           <input type="checkbox" id="reveal" ${reveal ? "checked" : ""}> Show masked fields</label>
       </div>
     </div>
@@ -624,6 +842,9 @@ async function loadPerson(id) {
       <div id="ondemand"></div>
     </section>`;
   $("#copyid").onclick = () => copy(id, "ID copied");
+  $("#prevp")?.addEventListener("click", () => goPerson(resultOrder[pos - 1]));
+  $("#nextp")?.addEventListener("click", () => goPerson(resultOrder[pos + 1]));
+  el.onclick = e => { const b = e.target.closest(".copybtn"); if (b) copy(b.dataset.copy, `Copied ${b.dataset.name}`); };
   $("#reveal").onchange = e => { reveal = e.target.checked; loadPerson(id); };
   $("#hide")?.addEventListener("click", () => { reveal = false; loadPerson(id); });
   $("#showempty").onchange = e => { store.set("showEmpty", e.target.checked); $("#sections").innerHTML = p.sections.map(sec => section(sec, e.target.checked)).join(""); };
@@ -644,7 +865,9 @@ function section(sec, showEmpty) {
     const isEmpty = c => r[c] === null || r[c] === undefined || r[c] === "";
     const cols = showEmpty ? sec.columns : sec.columns.filter(c => !isEmpty(c));
     const hidden = sec.columns.length - cols.length;
-    body = `<dl class="kv">${cols.map(c => `<div class="${sec.masked.includes(c) && !reveal ? "masked" : ""}"><dt>${esc(c)}</dt><dd>${val(r[c])}</dd></div>`).join("")}</dl>` +
+    const canCopy = c => !isEmpty(c) && (reveal || !sec.masked.includes(c));
+    body = `<dl class="kv">${cols.map(c => `<div class="${sec.masked.includes(c) && !reveal ? "masked" : ""}"><dt>${esc(c)}</dt><dd>${val(r[c])}</dd>${canCopy(c)
+      ? `<button type="button" class="copybtn" data-copy="${esc(r[c])}" data-name="${esc(c)}" aria-label="Copy ${esc(c)}">Copy</button>` : ""}</div>`).join("")}</dl>` +
       (hidden ? `<div class="kvempty">${hidden} empty field${hidden > 1 ? "s" : ""} hidden</div>` : "");
   } else {
     body = resultTable(sec.columns, sec.rows);
@@ -870,9 +1093,63 @@ async function openTable(name) {
 }
 
 /* =================================================================== boot */
+var aiReady = true;
 if (store.get("compact", false)) document.body.classList.add("compact");
+
+// Theme: system -> light -> dark -> system
+const THEMES = ["system", "light", "dark"];
+const media = matchMedia("(prefers-color-scheme: dark)");
+function applyTheme() {
+  const pref = store.get("theme", "system");
+  document.documentElement.dataset.theme = pref === "system" ? (media.matches ? "dark" : "light") : pref;
+  const label = `Theme: ${pref}${pref === "system" ? ` (${document.documentElement.dataset.theme})` : ""}`;
+  $("#themebtn").setAttribute("aria-label", label); $("#themebtn").title = label + " · click to change";
+}
+$("#themebtn").onclick = () => {
+  const next = THEMES[(THEMES.indexOf(store.get("theme", "system")) + 1) % THEMES.length];
+  store.set("theme", next); applyTheme(); toast(`Theme: ${next}`);
+};
+media.addEventListener("change", applyTheme);
+applyTheme();
+$("#helpbtn").onclick = () => $("#shortcuts").showModal();
+
+function renderAccount(st) {
+  const el = $("#account");
+  if (st.auth_enabled && st.user) {
+    const ini = st.user.display.split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+    el.innerHTML = `<span class="userchip" title="Signed in as ${esc(st.user.name)}. Your searches are logged under this name."><span class="av">${esc(ini)}</span><span class="nm">${esc(st.user.display)}</span>
+      <button class="btn ghost sm" id="signout">Sign out</button></span>`;
+    $("#signout").onclick = async () => { await fetch("/api/logout", {method: "POST"}); location.href = "/login"; };
+  } else if (!st.auth_enabled) {
+    el.innerHTML = `<span class="env warn" tabindex="0" title="Anyone who can reach this server can search and see full records, and the log only records an IP address. Run: .venv/bin/python manage_users.py add <name> to turn on sign-in." aria-label="No sign-in: anyone who can reach this server can use it">⚠<span class="lbl"> No sign-in</span></span>`;
+  }
+}
+
+function renderAskSetup() {
+  $("#thread").innerHTML = `<div class="setup">
+    <h2>Ask AI needs a Claude API key</h2>
+    <p class="muted">The People, Schema and Relationships tools work without one. To ask questions in plain English, the server needs an Anthropic API key:</p>
+    <ol>
+      <li>Get a key from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</li>
+      <li>Stop the server and start it with the key set:
+        <pre>cd ~/Projects/talk_to_db
+export ANTHROPIC_API_KEY=sk-ant-...
+.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8765</pre></li>
+      <li>Reload this page.</li>
+    </ol>
+    <p class="small muted">Questions and up to 50 result rows per query are sent to the Claude API to write the answer.</p>
+  </div>`;
+}
+
+getJSON("/api/status").then(st => {
+  STATUS = st.status_labels || STATUS;
+  aiReady = st.ai_ready;
+  $("#dbinfo").textContent = `${st.database} · ${st.table_count.toLocaleString()} tables`;
+  renderAccount(st);
+  if (!aiReady) { renderAskSetup(); $("nav button[data-view=ask]").title = "Needs a Claude API key - open for setup steps"; }
+  if (lastResults) renderResults();
+}).catch(() => {});
 getJSON("/api/schema/modules").then(r => {
-  $("#dbinfo").textContent = `${r.database} · ${r.table_count.toLocaleString()} tables`;
   modLabels = Object.fromEntries(Object.entries(r.modules).map(([m, s]) => [m, s.label || ""]));
 }).catch(() => {});
 routeHash();
