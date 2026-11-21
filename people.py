@@ -11,7 +11,7 @@ import re
 import threading
 import time
 
-from config import QUERY_TIMEOUT_MS, ro_connect
+from config import QUERY_TIMEOUT_MS, db_key, ro_connect
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATALOG = json.load(open(os.path.join(HERE, "catalog.json")))
@@ -102,28 +102,23 @@ REVEALABLE = {("user_login_attempts", "password")}
 
 
 def _shape(rows: list[dict], reveal: bool, table: str = "") -> tuple[list[str], list[dict], list[str]]:
-    """Drop hidden columns, mask sensitive ones. Returns (columns, rows, masked_columns)."""
+    """Return every column, unmasked. (Hidden/sensitive masking disabled on request.)"""
     if not rows:
         return [], [], []
-    revealable = {c for c in rows[0] if (table, c) in REVEALABLE}
-    cols = [c for c in rows[0] if c in revealable or not HIDDEN_COL.search(c)]
-    masked = [c for c in cols if c in revealable or SENSITIVE_COL.search(c)]
-    out = []
-    for r in rows:
-        out.append({c: (_clean(r[c]) if reveal or c not in masked else _mask(r[c], c in revealable)) for c in cols})
-    return cols, out, masked
+    cols = list(rows[0])
+    out = [{c: _clean(r[c]) for c in cols} for r in rows]
+    return cols, out, []
 
 
-_IS_MARIADB = None   # detected on first connection
+_IS_MARIADB: dict[str, bool] = {}   # per database, detected on first connection
 
 
-def _timeout_sql(cur, timeout_ms: int) -> str:
+def _timeout_sql(cur, timeout_ms: int, dbk: str) -> str:
     """Session statement-timeout SQL for whichever server we're on (MySQL vs MariaDB differ)."""
-    global _IS_MARIADB
-    if _IS_MARIADB is None:
+    if dbk not in _IS_MARIADB:
         cur.execute("SELECT VERSION() AS v")
-        _IS_MARIADB = "mariadb" in str(cur.fetchone()["v"]).lower()
-    if _IS_MARIADB:
+        _IS_MARIADB[dbk] = "mariadb" in str(cur.fetchone()["v"]).lower()
+    if _IS_MARIADB[dbk]:
         return f"SET SESSION max_statement_time = {int(timeout_ms) / 1000}"   # seconds
     return f"SET SESSION max_execution_time = {int(timeout_ms)}"              # milliseconds
 
@@ -131,10 +126,11 @@ def _timeout_sql(cur, timeout_ms: int) -> str:
 class _Conn:
     """One read-only connection with a statement timeout."""
 
-    def __init__(self, timeout_ms: int = QUERY_TIMEOUT_MS):
-        self.conn = ro_connect()
+    def __init__(self, timeout_ms: int = QUERY_TIMEOUT_MS, dbk: str | None = None):
+        dbk = db_key(dbk)
+        self.conn = ro_connect(dbk)
         with self.conn.cursor() as cur:
-            cur.execute(_timeout_sql(cur, timeout_ms))
+            cur.execute(_timeout_sql(cur, timeout_ms, dbk))
             cur.execute("SET SESSION TRANSACTION READ ONLY")
 
     def all(self, sql, args=()):
@@ -284,7 +280,7 @@ def _digits(s):
     return re.sub(r"\D", "", s)
 
 
-def search(q: str, limit: int = 100) -> dict:
+def search(q: str, limit: int = 100, dbk: str | None = None) -> dict:
     fields, free = parse_query(q)
     where, args = [], []
 
@@ -376,7 +372,7 @@ def search(q: str, limit: int = 100) -> dict:
         ORDER BY ud.first_name, ud.last_name
         LIMIT {int(limit) + 1}"""
     started = time.time()
-    db = _Conn()
+    db = _Conn(dbk=dbk)
     try:
         rows = db.all(sql, args)
     finally:
@@ -392,8 +388,8 @@ def search(q: str, limit: int = 100) -> dict:
 
 # ---------------------------------------------------------------- profile
 
-def profile(pid: str, reveal: bool = False) -> dict:
-    db = _Conn()
+def profile(pid: str, reveal: bool = False, dbk: str | None = None) -> dict:
+    db = _Conn(dbk=dbk)
     try:
         if not db.all("SELECT 1 FROM users WHERE id = %s", (pid,)):
             if not db.all("SELECT 1 FROM user_details WHERE id = %s", (pid,)):
@@ -462,7 +458,7 @@ def _fetch_link(db: _Conn, table: str, keys: list[str], pid: str, reveal: bool):
             "more": len(rows) > LINK_ROW_LIMIT, "masked": masked, "approx_table_rows": t.get("approx_rows", 0)}
 
 
-def stream_links(pid: str, reveal: bool = False):
+def stream_links(pid: str, reveal: bool = False, dbk: str | None = None):
     """Yields events: plan, then one 'link' per table that has rows for this person, then done."""
     auto, on_demand = link_plan()
     yield {"type": "plan", "auto": len(auto),
@@ -473,7 +469,7 @@ def stream_links(pid: str, reveal: bool = False):
 
     def work(item):
         if not hasattr(local, "db"):
-            local.db = _Conn(timeout_ms=10_000)
+            local.db = _Conn(timeout_ms=10_000, dbk=dbk)
             with conns_lock:
                 conns.append(local.db)
         table, keys = item
@@ -499,11 +495,11 @@ def stream_links(pid: str, reveal: bool = False):
            "ms": int((time.time() - started) * 1000)}
 
 
-def scan_one(pid: str, table: str, reveal: bool = False) -> dict:
+def scan_one(pid: str, table: str, reveal: bool = False, dbk: str | None = None) -> dict:
     t = TABLES.get(table)
     if not t or not t.get("person_keys"):
         return {"table": table, "error": "Not a person-linked table."}
-    db = _Conn(timeout_ms=60_000)
+    db = _Conn(timeout_ms=60_000, dbk=dbk)
     try:
         res = _fetch_link(db, table, t["person_keys"], pid, reveal)
     finally:
@@ -553,19 +549,20 @@ _SQL_SUGGEST = {
     "religion": "SELECT religion, COUNT(*) FROM user_other_details WHERE religion <> '' GROUP BY religion HAVING COUNT(*) >= 5",
     "nationality": "SELECT nationality, COUNT(*) FROM user_other_details WHERE nationality <> '' GROUP BY nationality HAVING COUNT(*) >= 3",
 }
-_suggest_cache: dict[str, list] = {}
+_suggest_cache: dict[tuple[str, str], list] = {}   # (database, field) -> values
 _suggest_lock = threading.Lock()
 
 
-def _suggest_values(field: str) -> list[dict]:
+def _suggest_values(field: str, dbk: str | None = None) -> list[dict]:
     if field in _STATIC_SUGGEST:
         return [{"value": v, "hint": h} for v, h in _STATIC_SUGGEST[field]]
     sql = _SQL_SUGGEST.get(field)
     if not sql:
         return []
     with _suggest_lock:
-        if field not in _suggest_cache:
-            db = _Conn(timeout_ms=10_000)
+        ck = (db_key(dbk), field)
+        if ck not in _suggest_cache:
+            db = _Conn(timeout_ms=10_000, dbk=dbk)
             try:
                 rows = db.all(sql)
             finally:
@@ -579,14 +576,14 @@ def _suggest_values(field: str) -> list[dict]:
                     out.append({"value": v, "count": int(n) if n is not None else None})
             if field != "year":
                 out.sort(key=lambda x: -(x["count"] or 0))
-            _suggest_cache[field] = out
-        return _suggest_cache[field]
+            _suggest_cache[ck] = out
+        return _suggest_cache[ck]
 
 
-def suggest(field: str, prefix: str = "", limit: int = 12) -> dict:
+def suggest(field: str, prefix: str = "", limit: int = 12, dbk: str | None = None) -> dict:
     field = FIELD_ALIASES.get(field.lower(), field.lower())
     p = prefix.lower().strip()
-    vals = _suggest_values(field)
+    vals = _suggest_values(field, dbk)
     if p:
         starts = [v for v in vals if v["value"].lower().startswith(p)]
         inside = [v for v in vals if p in v["value"].lower() and v not in starts]

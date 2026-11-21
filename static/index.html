@@ -71,6 +71,8 @@ header { position: sticky; top: 0; z-index: 20; display: flex; align-items: cent
 .brand { font-weight: 600; font-size: var(--f16); white-space: nowrap; }
 .env { display: inline-flex; align-items: center; gap: 6px; font-size: var(--f12); color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
 .env .lock { color: var(--ok); }
+.dbpick { font: inherit; font-size: var(--f12); color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; cursor: pointer; }
+.dbpick.proxy { border-color: var(--accent); color: var(--accent); }
 nav { margin-left: auto; display: flex; gap: 2px; }
 nav button, nav a { border: 0; background: none; color: var(--muted); height: 52px; padding: 0 var(--s3); cursor: pointer; font-size: var(--f14);
   text-decoration: none; display: inline-flex; align-items: center; border-bottom: 2px solid transparent; border-radius: 0; }
@@ -191,8 +193,6 @@ td .name { font-weight: 500; }
 .kv > div { padding: var(--s2) var(--s3); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); min-width: 0; margin: 0 -1px -1px 0; }
 .kv dt { font: 11px var(--mono); color: var(--muted); }
 .kv dd { margin: 0; font-size: var(--f13); overflow-wrap: anywhere; }
-.kv .masked dd { font-family: var(--mono); letter-spacing: .05em; }
-.kv .masked dt::after { content: " · masked"; color: var(--warn); }
 .kvempty { font-size: var(--f12); color: var(--muted); margin-top: var(--s2); }
 .tag { font: 600 11px var(--mono); padding: 1px 6px; border-radius: var(--r1); background: var(--surface-2); color: var(--muted); }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
@@ -318,6 +318,7 @@ dialog .close { position: absolute; top: 12px; right: 12px; }
 <header>
   <span class="brand">MIS Lookup</span>
   <span class="env" id="env" title="Every query runs on a SELECT-only MySQL account"><span class="lock">●</span><span id="dbinfo">local</span> · read-only</span>
+  <select class="dbpick" id="dbpick" aria-label="Database" title="Which database to query"></select>
   <nav aria-label="Main">
     <button data-view="people" aria-current="page">People</button>
     <button data-view="map">Schema</button>
@@ -722,7 +723,6 @@ let resultOrder = [];
 
 /* --- profile --- */
 let modLabels = {};
-let reveal = false;
 async function loadPerson(id) {
   clearTimeout(pTimer); acClose();   // a pending debounced search must not replace the profile
   if (linksAbort) linksAbort.abort();
@@ -731,7 +731,7 @@ async function loadPerson(id) {
   el.innerHTML = `<div class="crumbs"><a onclick="backToResults()">← People</a></div>
     <div class="pcard"><div class="avatar other"></div><div style="display:grid;gap:10px"><div class="skel" style="width:40%;height:22px"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:55%"></div></div></div>`;
   let p;
-  try { p = await getJSON(`/api/people/${encodeURIComponent(id)}?reveal=${reveal}`); }
+  try { p = await getJSON(`/api/people/${encodeURIComponent(id)}`); }
   catch (e) { el.innerHTML = `<div class="crumbs"><a onclick="backToResults()">← People</a></div><div class="alert danger"><div class="grow"><b>Couldn't load ${esc(id)}</b>${esc(e.message)}.</div><button class="btn sm" onclick="loadPerson('${esc(id)}')">Retry</button></div>`; return; }
   if (!p.found) { el.innerHTML = `<div class="crumbs"><a onclick="backToResults()">← People</a></div><div class="emptystate"><h2>No person with ID ${esc(id)}</h2><p>The ID isn't in <code>users</code> or <code>user_details</code>. Check for a typo or search by name.</p></div>`; return; }
   const s = p.summary; remember(s);
@@ -758,11 +758,8 @@ async function loadPerson(id) {
       </div>
       <div class="pactions">
         <button class="btn" id="copyid">Copy ID</button>
-        <label class="switch" title="Shows Aadhaar, bank, PAN and passport numbers, and wrong passwords typed at failed MIS logins. Every reveal is written to the access log.">
-          <input type="checkbox" id="reveal" ${reveal ? "checked" : ""}> Show masked fields</label>
       </div>
     </div>
-    ${reveal ? `<div class="alert warn" style="margin-top:12px"><span aria-hidden="true">⚠</span><div class="grow"><b>Sensitive fields are visible</b>This view was written to the access log with your address. Turn it off when you're done.</div><button class="btn sm" id="hide">Hide again</button></div>` : ""}
     <nav class="subnav" aria-label="Sections" id="subnav">
       ${p.sections.map(sec => `<a href="#" data-to="sec-${esc(sec.table)}">${esc(sec.title)}</a>`).join("")}
       <a href="#" data-to="sec-links">Linked data <span id="linkcount"></span></a>
@@ -785,8 +782,6 @@ async function loadPerson(id) {
   $("#prevp")?.addEventListener("click", () => goPerson(resultOrder[pos - 1]));
   $("#nextp")?.addEventListener("click", () => goPerson(resultOrder[pos + 1]));
   el.onclick = e => { const b = e.target.closest(".copybtn"); if (b) copy(b.dataset.copy, `Copied ${b.dataset.name}`); };
-  $("#reveal").onchange = e => { reveal = e.target.checked; loadPerson(id); };
-  $("#hide")?.addEventListener("click", () => { reveal = false; loadPerson(id); });
   $("#showempty").onchange = e => { store.set("showEmpty", e.target.checked); $("#sections").innerHTML = p.sections.map(sec => section(sec, e.target.checked)).join(""); };
   $$("#subnav a").forEach(a => a.onclick = e => { e.preventDefault(); document.getElementById(a.dataset.to)?.scrollIntoView({behavior: "smooth"}); });
   $("#linkfilter").oninput = e => filterLinks(e.target.value.toLowerCase());
@@ -798,21 +793,19 @@ async function loadPerson(id) {
 function backToResults() { if (lastResults) history.back(); else location.hash = ""; }
 
 function section(sec, showEmpty) {
-  const masked = sec.masked.length ? `<span class="tag warn">${reveal ? "revealed" : "masked"}: ${esc(sec.masked.join(", "))}</span>` : "";
   let body;
   if (sec.rows.length === 1) {
     const r = sec.rows[0];
     const isEmpty = c => r[c] === null || r[c] === undefined || r[c] === "";
     const cols = showEmpty ? sec.columns : sec.columns.filter(c => !isEmpty(c));
     const hidden = sec.columns.length - cols.length;
-    const canCopy = c => !isEmpty(c) && (reveal || !sec.masked.includes(c));
-    body = `<dl class="kv">${cols.map(c => `<div class="${sec.masked.includes(c) && !reveal ? "masked" : ""}"><dt>${esc(c)}</dt><dd>${val(r[c])}</dd>${canCopy(c)
+    body = `<dl class="kv">${cols.map(c => `<div><dt>${esc(c)}</dt><dd>${val(r[c])}</dd>${!isEmpty(c)
       ? `<button type="button" class="copybtn" data-copy="${esc(r[c])}" data-name="${esc(c)}" aria-label="Copy ${esc(c)}">Copy</button>` : ""}</div>`).join("")}</dl>` +
       (hidden ? `<div class="kvempty">${hidden} empty field${hidden > 1 ? "s" : ""} hidden</div>` : "");
   } else {
     body = resultTable(sec.columns, sec.rows);
   }
-  return `<details class="psec" open id="sec-${esc(sec.table)}"><summary><h2>${esc(sec.title)}</h2><code class="sub">${esc(sec.table)}</code>${sec.rows.length > 1 ? `<span class="tag">${sec.rows.length} rows</span>` : ""}${masked}</summary>${body}</details>`;
+  return `<details class="psec" open id="sec-${esc(sec.table)}"><summary><h2>${esc(sec.title)}</h2><code class="sub">${esc(sec.table)}</code>${sec.rows.length > 1 ? `<span class="tag">${sec.rows.length} rows</span>` : ""}</summary>${body}</details>`;
 }
 
 function spy() {
@@ -832,7 +825,7 @@ async function streamLinks(id) {
   const status = html => { const s = $("#linkstatus"); if (s) s.innerHTML = html; };
   status(`<span style="display:inline-flex;gap:8px;align-items:center"><span class="progress"><div></div></span>Searching…</span>`);
   try {
-    const res = await fetch(`/api/people/${encodeURIComponent(id)}/links?reveal=${reveal}`, {signal: linksAbort.signal});
+    const res = await fetch(`/api/people/${encodeURIComponent(id)}/links`, {signal: linksAbort.signal});
     const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
     while (true) {
       const {value, done} = await reader.read(); if (done) break;
@@ -864,7 +857,7 @@ function addLink(ev) {
   g.n++; g.el.querySelector(".count").textContent = `${g.n} table${g.n > 1 ? "s" : ""}`;
   const s = document.createElement("details"); s.className = "ltable"; s.dataset.table = ev.table.toLowerCase();
   s.innerHTML = `<summary><code>${esc(ev.table)}</code><span class="tag">${ev.rows.length}${ev.more ? "+" : ""} row${ev.rows.length > 1 ? "s" : ""}</span>
-      <span class="sub">matched on ${esc(ev.keys.join(" / "))}</span>${ev.masked.length ? `<span class="tag warn">${reveal ? "revealed" : "masked"}: ${esc(ev.masked.join(", "))}</span>` : ""}</summary>
+      <span class="sub">matched on ${esc(ev.keys.join(" / "))}</span></summary>
     <div class="body">${resultTable(ev.columns, ev.rows)}<div class="meta"><button type="button" class="btn sm">Download CSV</button>${ev.more ? `<span>first 50 rows only</span>` : ""}</div></div>`;
   s.querySelector(".meta button").onclick = () => downloadCSV(ev.columns, ev.rows, `${ev.table}.csv`);
   g.el.querySelector(".inner").appendChild(s);
@@ -887,7 +880,7 @@ function renderOnDemand(id, list) {
   $$("#ondemand button").forEach(b => b.onclick = async () => {
     b.disabled = true; b.innerHTML = `<span class="spinner" aria-hidden="true"></span><code>${esc(b.dataset.t)}</code> scanning…`;
     try {
-      const r = await getJSON(`/api/people/${encodeURIComponent(id)}/scan?table=${encodeURIComponent(b.dataset.t)}&reveal=${reveal}`);
+      const r = await getJSON(`/api/people/${encodeURIComponent(id)}/scan?table=${encodeURIComponent(b.dataset.t)}`);
       if (r.error) b.innerHTML = `⚠ <code>${esc(b.dataset.t)}</code> ${esc(r.error)}`;
       else if (r.empty) b.innerHTML = `○ <code>${esc(b.dataset.t)}</code> no rows`;
       else { b.innerHTML = `✓ <code>${esc(b.dataset.t)}</code> ${r.rows.length}${r.more ? "+" : ""} rows, added above`; addLink({type: "link", ...r}); groups[r.module].el.open = true; }
@@ -979,8 +972,8 @@ function renderAccount(st) {
     el.innerHTML = `<span class="userchip" title="Signed in as ${esc(st.user.name)}. Your searches are logged under this name."><span class="av">${esc(ini)}</span><span class="nm">${esc(st.user.display)}</span>
       <button class="btn ghost sm" id="signout">Sign out</button></span>`;
     $("#signout").onclick = async () => { await fetch("/api/logout", {method: "POST"}); location.href = "/login"; };
-  } else if (!st.auth_enabled) {
-    el.innerHTML = `<span class="env warn" tabindex="0" title="Anyone who can reach this server can search and see full records, and the log only records an IP address. Run: .venv/bin/python manage_users.py add <name> to turn on sign-in." aria-label="No sign-in: anyone who can reach this server can use it">⚠<span class="lbl"> No sign-in</span></span>`;
+  } else {
+    el.innerHTML = "";   // no sign-in warning
   }
 }
 
@@ -989,6 +982,17 @@ getJSON("/api/status").then(st => {
   $("#dbinfo").textContent = `${st.database} · ${st.table_count.toLocaleString()} tables`;
   renderAccount(st);
   if (lastResults) renderResults();
+}).catch(() => {});
+getJSON("/api/databases").then(r => {
+  const sel = $("#dbpick");
+  sel.innerHTML = r.options.map(o => `<option value="${esc(o.key)}">${esc(o.label)} DB</option>`).join("");
+  sel.value = r.current;
+  sel.classList.toggle("proxy", r.current !== "local");
+  sel.onchange = async () => {
+    const res = await fetch("/api/database", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({key: sel.value})});
+    if (res.status === 401) return toLogin();
+    location.reload();   // drop results and suggestions from the other database
+  };
 }).catch(() => {});
 getJSON("/api/schema/modules").then(r => {
   modLabels = Object.fromEntries(Object.entries(r.modules).map(([m, s]) => [m, s.label || ""]));

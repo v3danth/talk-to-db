@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from pydantic import BaseModel
 
 import auth
+import config
 import people
 import schema
 
@@ -30,6 +31,35 @@ async def require_sign_in(request: Request, call_next):
     resp = await call_next(request)
     if request.url.path.startswith("/api/"):
         resp.headers.setdefault("Cache-Control", "no-store")
+    return resp
+
+
+DB_COOKIE = "ttd_db"
+
+
+def _db(request: Request) -> str:
+    """Which database this browser picked in the header (Local / Proxy)."""
+    return config.db_key(request.cookies.get(DB_COOKIE))
+
+
+class DbIn(BaseModel):
+    key: str
+
+
+@app.get("/api/databases")
+def databases(request: Request):
+    return {"current": _db(request),
+            "options": [{"key": k, "label": d["label"]} for k, d in config.DATABASES.items()]}
+
+
+@app.post("/api/database")
+def set_database(body: DbIn, request: Request):
+    if body.key not in config.DATABASES:
+        raise HTTPException(400, "Unknown database.")
+    people.audit(_client(request), "switch_db", {"db": body.key})
+    resp = JSONResponse({"ok": True, "current": body.key})
+    resp.set_cookie(DB_COOKIE, body.key, max_age=365 * 86400, httponly=True, samesite="strict",
+                    secure=request.url.scheme == "https")
     return resp
 
 
@@ -72,12 +102,13 @@ def status(request: Request):
     user = auth.session_user(request.cookies.get(auth.COOKIE)) if auth.enabled() else None
     return {"auth_enabled": auth.enabled(), "user": user,
             "database": schema.CATALOG["database"], "table_count": len(schema.TABLES),
-            "status_labels": people.STATUS_LABELS}
+            "status_labels": people.STATUS_LABELS, "db": _db(request),
+            "db_label": config.DATABASES[_db(request)]["label"]}
 
 
 @app.get("/api/people/suggest")
-def people_suggest(field: str, prefix: str = ""):
-    return people.suggest(field, prefix)
+def people_suggest(field: str, request: Request, prefix: str = ""):
+    return people.suggest(field, prefix, dbk=_db(request))
 
 
 NO_STORE = {"Cache-Control": "no-store"}   # pages show personal data: never serve them from the browser cache
@@ -106,8 +137,8 @@ def schema_modules():
 
 @app.get("/api/people/search")
 def people_search(q: str, request: Request):
-    people.audit(_client(request), "search", {"q": people.redact_query(q)})
-    return people.search(q)
+    people.audit(_client(request), "search", {"q": people.redact_query(q), "db": _db(request)})
+    return people.search(q, dbk=_db(request))
 
 
 @app.get("/api/people/fields")
@@ -117,21 +148,21 @@ def people_fields():
 
 @app.get("/api/people/{pid}")
 def people_profile(pid: str, request: Request, reveal: bool = False):
-    people.audit(_client(request), "profile_reveal" if reveal else "profile", {"id": pid})
-    return people.profile(pid, reveal)
+    people.audit(_client(request), "profile_reveal" if reveal else "profile", {"id": pid, "db": _db(request)})
+    return people.profile(pid, reveal, dbk=_db(request))
 
 
 @app.get("/api/people/{pid}/links")
 def people_links(pid: str, request: Request, reveal: bool = False):
-    people.audit(_client(request), "links_reveal" if reveal else "links", {"id": pid})
-    return StreamingResponse((_sse(ev) for ev in people.stream_links(pid, reveal)), media_type="text/event-stream",
+    people.audit(_client(request), "links_reveal" if reveal else "links", {"id": pid, "db": _db(request)})
+    return StreamingResponse((_sse(ev) for ev in people.stream_links(pid, reveal, dbk=_db(request))), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/people/{pid}/scan")
 def people_scan(pid: str, table: str, request: Request, reveal: bool = False):
-    people.audit(_client(request), "scan", {"id": pid, "table": table, "reveal": reveal})
-    return people.scan_one(pid, table, reveal)
+    people.audit(_client(request), "scan", {"id": pid, "table": table, "reveal": reveal, "db": _db(request)})
+    return people.scan_one(pid, table, reveal, dbk=_db(request))
 
 
 @app.get("/relationships")
