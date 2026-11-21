@@ -35,18 +35,15 @@ DB_RO_PASSWORD = os.environ.get("DB_RO_PASSWORD", "passwd")
 QUERY_TIMEOUT_MS = int(os.environ.get("TTD_QUERY_TIMEOUT_MS", "30000"))
 
 # Databases the app can switch between (picked per user in the header).
-# "proxy" is a remote DB that isn't directly reachable from here. Run an SSH local forward first, e.g.:
-#   ssh -L 13306:<remote-db-host>:3306 <jump-host>
-# then the app connects to 127.0.0.1:13306.  Set the real host/user/name/password in .env.
-# To tunnel over a SOCKS5 proxy instead of an SSH forward, set DB_PROXY_SOCKS_PORT.
-_proxy = {"label": "Proxy", "host": os.environ.get("DB_PROXY_DB_HOST", "127.0.0.1"),
-          "port": int(os.environ.get("DB_PROXY_DB_PORT", "13306")),
+# "proxy" is a remote DB reached through a SOCKS5 proxy (default 127.0.0.1:20234).
+# Set the real host/user/name/password in .env.
+_proxy = {"label": "Proxy", "host": os.environ.get("DB_PROXY_DB_HOST", ""),
+          "port": int(os.environ.get("DB_PROXY_DB_PORT", "3306")),
           "name": os.environ.get("DB_PROXY_NAME", DB_NAME),
           "user": os.environ.get("DB_PROXY_USER", ""),
-          "password": os.environ.get("DB_PROXY_PASSWORD", "")}
-if os.environ.get("DB_PROXY_SOCKS_PORT"):
-    _proxy["socks5"] = (os.environ.get("DB_PROXY_SOCKS_HOST", "127.0.0.1"),
-                        int(os.environ["DB_PROXY_SOCKS_PORT"]))
+          "password": os.environ.get("DB_PROXY_PASSWORD", ""),
+          "socks5": (os.environ.get("DB_PROXY_SOCKS_HOST", "127.0.0.1"),
+                     int(os.environ.get("DB_PROXY_SOCKS_PORT", "20234")))}
 DATABASES = {
     "local": {"label": "Local", "host": DB_HOST, "port": DB_PORT, "name": DB_NAME,
               "user": DB_RO_USER, "password": DB_RO_PASSWORD},
