@@ -11,13 +11,10 @@ DB_NAME = os.environ.get("DB_NAME", "mis_40_50")
 DB_ADMIN_USER = os.environ.get("DB_ADMIN_USER", "root")
 DB_ADMIN_PASSWORD = os.environ.get("DB_ADMIN_PASSWORD", "")
 
-# Read-only user: the ONLY account the chat agent uses to run queries.
+# Read-only user: the ONLY account the app uses to run queries.
 DB_RO_USER = os.environ.get("DB_RO_USER", "talk_to_db_ro")
 DB_RO_PASSWORD = os.environ.get("DB_RO_PASSWORD", "talk_to_db_ro_local")
 
-MODEL = os.environ.get("TTD_MODEL", "claude-opus-5-5")
-MAX_ROWS = int(os.environ.get("TTD_MAX_ROWS", "200"))          # rows returned to the UI per query
-MAX_ROWS_TO_MODEL = int(os.environ.get("TTD_MAX_ROWS_TO_MODEL", "50"))  # rows the model sees per query
 QUERY_TIMEOUT_MS = int(os.environ.get("TTD_QUERY_TIMEOUT_MS", "30000"))
 
 

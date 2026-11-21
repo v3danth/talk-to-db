@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MIS Lookup</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script>
 // Resolve the theme before first paint so there's no flash.
 (function () {
@@ -232,36 +231,10 @@ table.result td.num { text-align: right; font-variant-numeric: tabular-nums; }
 #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; background: var(--text); color: var(--surface); padding: 8px 14px; border-radius: var(--r2); font-size: var(--f13); box-shadow: var(--sh3); transition: .2s ease-out; pointer-events: none; z-index: 50; }
 #toast.show { opacity: 1; transform: translateX(-50%); }
 
-/* ---------- ask ---------- */
-.turn { margin-bottom: 28px; max-width: 980px; }
-.q { font-weight: 600; font-size: var(--f16); margin-bottom: 10px; }
-.steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-details.step { border: 1px solid var(--border); border-radius: var(--r2); background: var(--surface); }
-details.step > summary { cursor: pointer; padding: 7px 12px; font-size: var(--f13); color: var(--muted); list-style: none; display: flex; gap: 8px; align-items: center; }
-details.step > summary::-webkit-details-marker { display: none; }
-details.step > summary::before { content: "▸"; font-size: 11px; }
-details.step[open] > summary::before { content: "▾"; }
-details.step .body { padding: 0 12px 12px; }
-.step.err > summary { color: var(--danger); }
+/* ---------- schema ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { font: 12px var(--mono); background: var(--surface-2); border-radius: var(--r1); padding: 2px 6px; cursor: pointer; border: 0; }
 .chip:hover { color: var(--accent); }
-pre { background: var(--surface-2); padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 6px 0; }
-.thinking { font-size: var(--f13); color: var(--muted); white-space: pre-wrap; }
-.answer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); padding: 4px 18px; }
-.answer:empty { display: none; }
-.answer table { border-collapse: collapse; font-size: var(--f13); } .answer th, .answer td { border: 1px solid var(--border); padding: 4px 8px; }
-.error { color: var(--danger); background: var(--danger-soft); padding: 8px 12px; border-radius: 6px; font-size: var(--f14); }
-.live { font-size: var(--f13); color: var(--muted); display: flex; align-items: center; gap: 8px; }
-.empty { color: var(--muted); padding: 40px 0 10px; max-width: 980px; }
-.empty h2 { color: var(--text); font-size: var(--f20); margin: 0 0 6px; }
-.empty .examples { justify-content: flex-start; }
-.empty .examples button { font-family: var(--sans); text-align: left; }
-form.ask { position: fixed; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, var(--bg) 30%); padding: 24px 16px 18px; }
-form.ask .box { max-width: 980px; margin: 0 auto; display: flex; gap: 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r3); padding: 8px; box-shadow: var(--sh2); }
-form.ask textarea { flex: 1; border: 0; resize: none; background: transparent; padding: 6px 8px; min-height: 24px; max-height: 180px; outline: none; }
-
-/* ---------- schema ---------- */
 .schema { display: grid; grid-template-columns: 300px 1fr; gap: 16px; }
 .schema input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--r2); background: var(--surface); margin-bottom: 10px; }
 .modlist { max-height: calc(100vh - 170px); overflow: auto; border: 1px solid var(--border); border-radius: var(--r3); background: var(--surface); }
@@ -314,11 +287,6 @@ dialog td { padding: 6px 0; border-bottom: 1px solid var(--border); }
 dialog td:first-child { width: 130px; }
 dialog .close { position: absolute; top: 12px; right: 12px; }
 
-/* ---------- ask setup state ---------- */
-.setup { max-width: 640px; margin: var(--s6) auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r3); padding: var(--s5); }
-.setup h2 { margin: 0 0 var(--s2); font-size: var(--f20); }
-.setup ol { padding-left: 20px; } .setup li { margin: var(--s2) 0; }
-
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
   header { padding: 0 var(--s4); gap: var(--s2); } #env { display: none; }
@@ -352,7 +320,6 @@ dialog .close { position: absolute; top: 12px; right: 12px; }
   <span class="env" id="env" title="Every query runs on a SELECT-only MySQL account"><span class="lock">●</span><span id="dbinfo">local</span> · read-only</span>
   <nav aria-label="Main">
     <button data-view="people" aria-current="page">People</button>
-    <button data-view="ask">Ask AI</button>
     <button data-view="map">Schema</button>
     <a href="/relationships" target="_blank" rel="noopener">Relationships ↗</a>
   </nav>
@@ -405,23 +372,6 @@ dialog .close { position: absolute; top: 12px; right: 12px; }
     <div id="pprofile" hidden></div>
   </section>
 
-  <!-- ================= ASK ================= -->
-  <section class="view" id="view-ask" aria-label="Ask AI">
-    <div id="thread">
-      <div class="empty" id="empty">
-        <h2>Ask anything about the MIS data</h2>
-        Plain-English questions. Claude finds the tables, writes read-only SQL, runs it, and shows every query and result.
-        <div class="examples">
-          <button>How many students are currently registered in each department this session?</button>
-          <button>Average CGPA by branch for the 2021 B.Tech batch</button>
-          <button>Which hostels have the most students allotted?</button>
-          <button>How many faculty members are there per designation?</button>
-          <button>Monthly count of leave applications in 2025</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- ================= SCHEMA ================= -->
   <section class="view" id="view-map" aria-label="Schema">
     <div class="schema">
@@ -434,20 +384,12 @@ dialog .close { position: absolute; top: 12px; right: 12px; }
   </section>
 </main>
 
-<form class="ask" id="ask" hidden>
-  <div class="box">
-    <textarea id="q" rows="1" placeholder="Ask a question about the data…" aria-label="Question"></textarea>
-    <button type="button" class="btn ghost" id="newchat">New chat</button>
-    <button type="submit" class="btn primary" id="send">Ask</button>
-  </div>
-</form>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const md = s => window.marked ? marked.parse(s) : `<pre>${esc(s)}</pre>`;
 const store = {
   get(k, d) { try { const v = localStorage.getItem("mis." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("mis." + k, JSON.stringify(v)); } catch {} },
@@ -466,9 +408,7 @@ async function getJSON(url) {
 function showView(name) {
   $$("nav button").forEach(x => { if (x.dataset.view === name) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
   $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
-  $("#ask").hidden = name !== "ask" || !aiReady;
   if (name === "map" && !$("#modlist").children.length) loadModules();
-  if (name === "ask") $("#q").focus();
 }
 $$("nav button").forEach(b => b.onclick = () => {
   const onProfile = $("#view-people").classList.contains("active") && !$("#pprofile").hidden;
@@ -955,90 +895,10 @@ function renderOnDemand(id, list) {
   });
 }
 
-/* =================================================================== ASK */
-let sessionId = null, busy = false;
-const ta = $("#q");
-ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; });
-ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#ask").requestSubmit(); } });
-$$(".empty .examples button").forEach(b => b.onclick = () => { ta.value = b.textContent; $("#ask").requestSubmit(); });
-$("#newchat").onclick = () => {
-  if (busy) return;
-  if (sessionId) fetch("/api/reset", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({session_id: sessionId})});
-  sessionId = null; $("#thread").innerHTML = ""; ta.focus();
-};
-$("#ask").onsubmit = async e => {
-  e.preventDefault();
-  const question = ta.value.trim();
-  if (!question || busy) return;
-  busy = true; $("#send").disabled = true; ta.value = ""; ta.style.height = "auto";
-  $("#empty")?.remove();
-  const turn = document.createElement("div"); turn.className = "turn";
-  turn.innerHTML = `<div class="q">${esc(question)}</div><div class="steps"></div><div class="answer"></div><div class="live"><span class="spinner"></span><span>Thinking…</span></div>`;
-  $("#thread").appendChild(turn);
-  turn.scrollIntoView({behavior: "smooth", block: "start"});
-  const steps = turn.querySelector(".steps"), answer = turn.querySelector(".answer"), live = turn.querySelector(".live");
-  let text = "", thinkingEl = null;
-  try {
-    const res = await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({session_id: sessionId, question})});
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
-    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
-    while (true) {
-      const {value, done} = await reader.read(); if (done) break;
-      buf += dec.decode(value, {stream: true});
-      let i;
-      while ((i = buf.indexOf("\n\n")) >= 0) {
-        const line = buf.slice(0, i); buf = buf.slice(i + 2);
-        if (!line.startsWith("data: ")) continue;
-        const ev = JSON.parse(line.slice(6));
-        if (ev.type === "session") sessionId = ev.session_id;
-        else if (ev.type === "thinking") {
-          if (!thinkingEl) { thinkingEl = step(steps, "reasoning", "Reasoning", ""); thinkingEl.body.className = "body thinking"; }
-          thinkingEl.body.textContent += ev.text;
-        }
-        else if (ev.type === "text") { text += ev.text; answer.innerHTML = md(text); live.querySelector("span:last-child").textContent = "Writing answer…"; }
-        else if (ev.type === "tool_start") { thinkingEl = null; live.querySelector("span:last-child").textContent = label(ev); }
-        else if (ev.type === "tool_result") renderTool(steps, ev);
-        else if (ev.type === "status") live.querySelector("span:last-child").textContent = "Thinking…";
-        else if (ev.type === "error") { const d = document.createElement("div"); d.className = "error"; d.textContent = ev.text; turn.appendChild(d); }
-      }
-    }
-  } catch (err) {
-    const d = document.createElement("div"); d.className = "error"; d.textContent = "Request failed: " + err.message; turn.appendChild(d);
-  } finally {
-    live.remove(); busy = false; $("#send").disabled = false; ta.focus();
-  }
-};
-function label(ev) {
-  if (ev.name === "search_tables") return `Searching schema for “${ev.input.query}”…`;
-  if (ev.name === "describe_tables") return `Reading ${ev.input.tables.join(", ")}…`;
-  return `Running query: ${ev.input.purpose || ""}…`;
-}
-function step(container, tag, title, html, open = false, err = false) {
-  const d = document.createElement("details"); d.className = "step" + (err ? " err" : ""); d.open = open;
-  d.innerHTML = `<summary><span class="tag">${tag}</span><span>${esc(title)}</span></summary><div class="body">${html}</div>`;
-  container.appendChild(d);
-  return {el: d, body: d.querySelector(".body")};
-}
-function renderTool(steps, ev) {
-  if (ev.kind === "search") step(steps, "search", `“${ev.query}” → ${ev.tables.length} tables`, chips(ev.tables));
-  else if (ev.kind === "describe") step(steps, "schema", ev.tables.join(", "), chips(ev.tables));
-  else if (ev.kind === "sql") {
-    const s = step(steps, "sql", `${ev.purpose || "Query"} · ${ev.row_count}${ev.truncated ? "+" : ""} rows · ${ev.ms} ms`, "", true);
-    s.body.innerHTML = `<pre>${esc(ev.sql)}</pre>` + resultTable(ev.columns, ev.rows) +
-      `<div class="meta"><span>${ev.row_count}${ev.truncated ? "+ (capped)" : ""} rows</span><button type="button" class="btn sm">Copy SQL</button><button type="button" class="btn sm">Download CSV</button></div>`;
-    const [copyBtn, csvBtn] = s.body.querySelectorAll(".meta button");
-    copyBtn.onclick = () => copy(ev.sql, "SQL copied");
-    csvBtn.onclick = () => downloadCSV(ev.columns, ev.rows);
-    steps.querySelectorAll("details.step[open]").forEach(d => { if (d !== s.el) d.open = false; });
-  } else if (ev.kind === "sql_error" || ev.kind === "tool_error") {
-    step(steps, "error", `${ev.purpose || "Query"} failed, retrying`, `<pre>${esc(ev.sql)}</pre><div class="error">${esc(ev.error)}</div>`, false, true);
-  }
-}
+/* =================================================================== shared */
 function chips(tables) {
   return `<div class="chips">${tables.map(t => `<button type="button" class="chip" onclick="openTable('${esc(t)}')">${esc(t)}</button>`).join("")}</div>`;
 }
-
-/* =================================================================== shared */
 function resultTable(cols, rows) {
   if (!cols.length) return "";
   if (!rows.length) return `<div class="meta">No rows.</div>`;
@@ -1093,7 +953,6 @@ async function openTable(name) {
 }
 
 /* =================================================================== boot */
-var aiReady = true;
 if (store.get("compact", false)) document.body.classList.add("compact");
 
 // Theme: system -> light -> dark -> system
@@ -1125,28 +984,10 @@ function renderAccount(st) {
   }
 }
 
-function renderAskSetup() {
-  $("#thread").innerHTML = `<div class="setup">
-    <h2>Ask AI needs a Claude API key</h2>
-    <p class="muted">The People, Schema and Relationships tools work without one. To ask questions in plain English, the server needs an Anthropic API key:</p>
-    <ol>
-      <li>Get a key from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</li>
-      <li>Stop the server and start it with the key set:
-        <pre>cd ~/Projects/talk_to_db
-export ANTHROPIC_API_KEY=sk-ant-...
-.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8765</pre></li>
-      <li>Reload this page.</li>
-    </ol>
-    <p class="small muted">Questions and up to 50 result rows per query are sent to the Claude API to write the answer.</p>
-  </div>`;
-}
-
 getJSON("/api/status").then(st => {
   STATUS = st.status_labels || STATUS;
-  aiReady = st.ai_ready;
   $("#dbinfo").textContent = `${st.database} · ${st.table_count.toLocaleString()} tables`;
   renderAccount(st);
-  if (!aiReady) { renderAskSetup(); $("nav button[data-view=ask]").title = "Needs a Claude API key - open for setup steps"; }
   if (lastResults) renderResults();
 }).catch(() => {});
 getJSON("/api/schema/modules").then(r => {

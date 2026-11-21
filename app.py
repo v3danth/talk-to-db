@@ -1,22 +1,16 @@
 """Web server for the talk-to-db app.  Run: .venv/bin/uvicorn app:app --host 127.0.0.1 --port 8765"""
 import json
-import os
-import threading
-import uuid
 from urllib.parse import quote
 
-import anthropic
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
-import agent
 import auth
 import people
+import schema
 
 app = FastAPI(title="Talk to MIS DB")
-_sessions: dict[str, list] = {}
-_locks: dict[str, threading.Lock] = {}
 
 
 PUBLIC_PATHS = {"/login", "/api/login", "/api/status"}
@@ -76,19 +70,14 @@ def logout(request: Request):
 @app.get("/api/status")
 def status(request: Request):
     user = auth.session_user(request.cookies.get(auth.COOKIE)) if auth.enabled() else None
-    return {"auth_enabled": auth.enabled(), "user": user, "ai_ready": bool(os.environ.get("ANTHROPIC_API_KEY")),
-            "database": agent.CATALOG["database"], "table_count": len(agent.TABLES),
+    return {"auth_enabled": auth.enabled(), "user": user,
+            "database": schema.CATALOG["database"], "table_count": len(schema.TABLES),
             "status_labels": people.STATUS_LABELS}
 
 
 @app.get("/api/people/suggest")
 def people_suggest(field: str, prefix: str = ""):
     return people.suggest(field, prefix)
-
-
-class ChatIn(BaseModel):
-    session_id: str | None = None
-    question: str
 
 
 NO_STORE = {"Cache-Control": "no-store"}   # pages show personal data: never serve them from the browser cache
@@ -99,59 +88,20 @@ def index():
     return FileResponse("static/index.html", headers=NO_STORE)
 
 
-@app.post("/api/chat")
-def chat(body: ChatIn):
-    sid = body.session_id or uuid.uuid4().hex
-    messages = _sessions.setdefault(sid, [])
-    lock = _locks.setdefault(sid, threading.Lock())
-    if not lock.acquire(blocking=False):
-        raise HTTPException(409, "This conversation is still answering the previous question.")
-
-    def events():
-        checkpoint = len(messages)
-        try:
-            yield _sse({"type": "session", "session_id": sid})
-            for ev in agent.run_turn(messages, body.question.strip()):
-                yield _sse(ev)
-        except anthropic.APIConnectionError:
-            del messages[checkpoint:]
-            yield _sse({"type": "error", "text": "Could not reach the Claude API. Check your network."})
-        except anthropic.AuthenticationError:
-            del messages[checkpoint:]
-            yield _sse({"type": "error", "text": "Claude API key missing or invalid. Set ANTHROPIC_API_KEY."})
-        except anthropic.RateLimitError:
-            del messages[checkpoint:]
-            yield _sse({"type": "error", "text": "Rate limited by the Claude API. Wait a moment and retry."})
-        except anthropic.APIStatusError as e:
-            del messages[checkpoint:]
-            yield _sse({"type": "error", "text": f"Claude API error {e.status_code}: {e.message}"[:500]})
-        finally:
-            lock.release()
-
-    return StreamingResponse(events(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-
-@app.post("/api/reset")
-def reset(body: dict):
-    _sessions.pop(body.get("session_id", ""), None)
-    return {"ok": True}
-
-
 @app.get("/api/schema/search")
 def schema_search(q: str):
-    return agent.search_tables(q, limit=40)
+    return schema.search_tables(q, limit=40)
 
 
 @app.get("/api/schema/table/{name}")
 def schema_table(name: str):
-    return agent.describe_tables([name])
+    return schema.describe_tables([name])
 
 
 @app.get("/api/schema/modules")
 def schema_modules():
-    return {"database": agent.CATALOG["database"], "table_count": len(agent.TABLES),
-            "modules": agent.CATALOG["modules"]}
+    return {"database": schema.CATALOG["database"], "table_count": len(schema.TABLES),
+            "modules": schema.CATALOG["modules"]}
 
 
 @app.get("/api/people/search")
