@@ -114,13 +114,27 @@ def _shape(rows: list[dict], reveal: bool, table: str = "") -> tuple[list[str], 
     return cols, out, masked
 
 
+_IS_MARIADB = None   # detected on first connection
+
+
+def _timeout_sql(cur, timeout_ms: int) -> str:
+    """Session statement-timeout SQL for whichever server we're on (MySQL vs MariaDB differ)."""
+    global _IS_MARIADB
+    if _IS_MARIADB is None:
+        cur.execute("SELECT VERSION() AS v")
+        _IS_MARIADB = "mariadb" in str(cur.fetchone()["v"]).lower()
+    if _IS_MARIADB:
+        return f"SET SESSION max_statement_time = {int(timeout_ms) / 1000}"   # seconds
+    return f"SET SESSION max_execution_time = {int(timeout_ms)}"              # milliseconds
+
+
 class _Conn:
     """One read-only connection with a statement timeout."""
 
     def __init__(self, timeout_ms: int = QUERY_TIMEOUT_MS):
         self.conn = ro_connect()
         with self.conn.cursor() as cur:
-            cur.execute(f"SET SESSION max_execution_time = {int(timeout_ms)}")
+            cur.execute(_timeout_sql(cur, timeout_ms))
             cur.execute("SET SESSION TRANSACTION READ ONLY")
 
     def all(self, sql, args=()):
